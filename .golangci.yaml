@@ -1,0 +1,43 @@
+version: "2"
+linters:
+  default: all
+  disable:
+    - depguard
+    - exhaustruct
+    - funlen
+    - nlreturn
+    - noinlineerr
+    - varnamelen
+    - wsl
+    - wsl_v5
+    # temp disabled
+    - cyclop
+    - godot
+    - godox
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+    rules:
+      - path: '(.+)_test\.go'
+        linters:
+          - lll
+formatters:
+  enable:
+    - gci
+    - gofmt
+    - gofumpt
+    - goimports
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
