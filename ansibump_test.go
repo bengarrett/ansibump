@@ -27,7 +27,7 @@ func ExampleBuffer() {
 	buf, _ = ansibump.Buffer(r, 80, false, xterm, charmap.CodePage437)
 	fmt.Printf("%q\n", buf.String())
 	// Output: "<div style=\"color:#aaa;background-color:#000;\"><span style=\"color:#a50;background-color:#0a0;\">HI</span></div>"
-	// "<div style=\"color:#aaa;background-color:#000;\"><span style=\"color:#808000;background-color:#008000;\">HI</span></div>"
+	// "<div style=\"color:#c0c0c0;background-color:#000;\"><span style=\"color:#808000;background-color:#008000;\">HI</span></div>"
 }
 
 func ExampleBuffer_codepage() {
@@ -92,12 +92,16 @@ func ExampleWriteTo() {
 
 func TestColor(t *testing.T) {
 	t.Parallel()
+	const cga = ansibump.CGA16
+	const xtm = ansibump.Xterm16
 	blk := ansibump.CBlack
 	be.Equal(t, blk.BG(), "background-color:#000;")
 	be.Equal(t, blk.FG(), "color:#000;")
-	colr := ansibump.Bright(ansibump.CBlack)
+	colr := ansibump.Bright(ansibump.CBlack, cga)
 	be.Equal(t, colr, ansibump.CDarkGray)
-	colr = ansibump.Bright(ansibump.CGreen)
+	colr = ansibump.Bright(ansibump.CRed, xtm) // there's no corresponding xterm color
+	be.Equal(t, colr, "")
+	colr = ansibump.Bright(ansibump.CGreen, cga)
 	be.Equal(t, colr, ansibump.CLGreen)
 	be.Equal(t, colr.BG(), "background-color:#5f5;")
 	be.Equal(t, colr.FG(), "color:#5f5;")
@@ -166,14 +170,14 @@ func TestColors(t *testing.T) {
 func TestRGB(t *testing.T) {
 	t.Parallel()
 	darkcyan := []int{38, 2, 0, 175, 135}
-	s := ansibump.RGB(darkcyan, 0)
+	s := ansibump.RGBHex(darkcyan, 0)
 	be.Equal(t, s, "00af87")
 	red3 := []int{48, 2, 215, 0, 0}
-	s = ansibump.RGB(red3, 0)
+	s = ansibump.RGBHex(red3, 0)
 	be.Equal(t, s, "d70000")
 	// out of range
-	s = ansibump.RGB(red3, 99)
+	s = ansibump.RGBHex(red3, 99)
 	be.Equal(t, s, "")
-	s = ansibump.RGB([]int{}, 1)
+	s = ansibump.RGBHex([]int{}, 1)
 	be.Equal(t, s, "")
 }

@@ -126,15 +126,31 @@ func (c Color) FG() string {
 	return "color:#" + string(c) + ";"
 }
 
-func CGA() [16]Color {
-	return [16]Color{
+type Colors [16]Color
+
+// DefaultFG will return the "white" variant of the color palette,
+// which can be used as the default foreground color.
+func (c Colors) DefaultFG() Color {
+	const white = 7
+	return c[white]
+}
+
+// DefaultBG will return the "black" variant of the color palette,
+// which can be used as the default background color.
+func (c Colors) DefaultBG() Color {
+	const black = 0
+	return c[black]
+}
+
+func CGA() Colors {
+	return Colors{
 		CBlack, CRed, CGreen, CBrown, CBlue, CMagenta, CCyan, CGray,
 		CDarkGray, CLRed, CLGreen, CYellow, CLBlue, CLMagenta, CLCyan, CWhite,
 	}
 }
 
-func Xterm() [16]Color {
-	return [16]Color{
+func Xterm() Colors {
+	return Colors{
 		XBlack, XMarron, XGreen, XOlive, XNavy, XPurple, XTeal, XSilver,
 		XGray, XRed, XLime, XYellow, XBlue, XFuchsia, XAqua, XWhite,
 	}
@@ -187,6 +203,8 @@ func NewDecoder(width int, strict bool, pal Palette, charset *charmap.Charmap) *
 	if charset == nil {
 		charset = charmap.XUserDefined
 	}
+	var def style
+	def.set(pal)
 	d := &Decoder{
 		charset:   charset,
 		palette:   pal,
@@ -194,8 +212,8 @@ func NewDecoder(width int, strict bool, pal Palette, charset *charmap.Charmap) *
 		x:         0,
 		y:         0,
 		width:     width,
-		defaultFG: CGray,
-		defaultBG: CBlack,
+		defaultFG: def.fg,
+		defaultBG: def.bg,
 		strict:    strict,
 	}
 	d.currentLine = d.buffer[0]
@@ -272,7 +290,7 @@ func (d *Decoder) Write(w io.Writer) error {
 	if w == nil {
 		w = io.Discard
 	}
-	lines := d.Lines()
+	lines := d.Lines(d.palette)
 	// build default color values if possible: fallback to defaults in Decoder
 	defFg := d.defaultFG
 	defBg := d.defaultBG
@@ -290,7 +308,9 @@ func (d *Decoder) Write(w io.Writer) error {
 
 // Lines renders each buffer line into a single HTML string.
 // Each contiguous run of identical attributes is wrapped in a <span style="...">.
-func (d *Decoder) Lines() []string {
+func (d *Decoder) Lines(p Palette) []string {
+	var def style
+	def.set(p)
 	out := []string{}
 	for _, line := range d.buffer {
 		if len(line) == 0 {
@@ -326,7 +346,7 @@ func (d *Decoder) Lines() []string {
 		// Build HTML for line
 		var b strings.Builder
 		for _, sp := range spans {
-			style := buildStyle(sp.Attr)
+			style := buildStyle(sp.Attr, def)
 			b.WriteString(`<span style="`)
 			b.WriteString(html.EscapeString(style))
 			b.WriteString(`">`)
@@ -344,8 +364,11 @@ func (d *Decoder) Read(r io.Reader) error { //nolint:gocyclo,gocognit
 	br := bufio.NewReader(r)
 	// current attribute applied to subsequent characters
 	cur := defaultAttr()
+	// codepage is used to toggle the display of ASCII control codes as IBM PC characters.
+	// the bool result mentioning "code page" in the encoding.charMap name such as "IBM Code Page 437".
+	codepage := strings.Contains(strings.ToLower(d.charset.String()), "code page")
+	lineWrapping := false
 	const space = ' '
-	pcdos := d.charset == charmap.CodePage437
 	for {
 		b, err := br.ReadByte()
 		if err == io.EOF {
@@ -360,9 +383,11 @@ func (d *Decoder) Read(r io.Reader) error { //nolint:gocyclo,gocognit
 		}
 		switch b {
 		case '\n':
-			d.newline()
+			if !lineWrapping {
+				d.newline()
+			}
+			continue
 		case '\r', NUL:
-			// ignore NUL and CR
 			continue
 		case EOF:
 			return nil
@@ -383,9 +408,8 @@ func (d *Decoder) Read(r io.Reader) error { //nolint:gocyclo,gocognit
 			}
 			// parse CSI
 			params := []int{}
-			paramInProgress := false
+			paramInProgress, private, setmode, linewrp := false, false, false, false
 			paramVal := 0
-			private := false
 			for {
 				cb, err := br.ReadByte()
 				if err == io.EOF {
@@ -395,27 +419,32 @@ func (d *Decoder) Read(r io.Reader) error { //nolint:gocyclo,gocognit
 				if err != nil {
 					return fmt.Errorf("play character reader: %w", err)
 				}
+				if cb == '=' {
+					setmode = true
+					continue
+				}
+				if setmode && '0' <= cb && cb <= '9' {
+					linewrp = wrapMode(cb)
+					continue
+				}
+				if setmode && (cb == 'h' || cb == 'l') {
+					lineWrapping = setWrapping(cb, linewrp, lineWrapping)
+					setmode = false
+				}
 				if '0' <= cb && cb <= '9' {
-					if !paramInProgress {
-						paramInProgress = true
-						paramVal = int(cb - '0')
-					} else {
-						paramVal = paramVal*10 + int(cb-'0') //nolint:mnd
-					}
+					paramInProgress, paramVal = inProgress(cb, paramInProgress, paramVal)
 					continue
 				}
 				if cb == ';' {
 					if paramInProgress {
-						params = append(params, paramVal)
-						paramInProgress = false
-						paramVal = 0
-					} else {
-						// ;; without number
-						if d.strict {
-							return ErrParam
-						}
-						params = append(params, -1)
+						paramInProgress, paramVal, params = resetCell(paramVal, params)
+						continue
 					}
+					// ;; without number
+					if d.strict {
+						return ErrParam
+					}
+					params = append(params, -1)
 					continue
 				}
 				if cb == ' ' {
@@ -429,16 +458,16 @@ func (d *Decoder) Read(r io.Reader) error { //nolint:gocyclo,gocognit
 				if paramInProgress {
 					params = append(params, paramVal)
 				}
-				if !private && cb == 'm' {
-					// SGR sequence: can be complex (including 38/48 extended)
+				sgrSequence := !private && cb == 'm' // SGR sequence: can be complex (including 38/48 extended)
+				if sgrSequence {
 					newAttr, err := ApplySGR(params, cur, d.palette)
 					if err != nil {
 						return err
 					}
 					cur = newAttr
 				}
-				if !private && cb != 'm' {
-					// other CSI sequences that affect cursor / buffer
+				csiSequence := !private && cb != 'm' // other CSI sequences that affect cursor / buffer
+				if csiSequence {
 					if err := d.ApplyCSI(cb, params); err != nil {
 						return err
 					}
@@ -446,7 +475,7 @@ func (d *Decoder) Read(r io.Reader) error { //nolint:gocyclo,gocognit
 				break
 			}
 		default:
-			if pcdos {
+			if codepage {
 				d.writeChar(b, cur)
 				continue
 			}
@@ -458,6 +487,38 @@ func (d *Decoder) Read(r io.Reader) error { //nolint:gocyclo,gocognit
 		}
 	}
 	return nil
+}
+
+func resetCell(paramVal int, params []int) (bool, int, []int) {
+	params = append(params, paramVal)
+	return false, 0, params
+}
+
+func inProgress(cb byte, pip bool, paramVal int) (bool, int) {
+	if !pip {
+		return true, int(cb - '0')
+	}
+	val := paramVal*10 + int(cb-'0') //nolint:mnd
+	return pip, val
+}
+
+// setWrapping uses the non-standard, [Screen Modes] controls found in ANSI.SYS.
+// Only enable line wrapping (ESC[=7h) and disable line wrapping are used (ESC[=7l).
+// Setting graphics and text modes are skipped.
+//
+// [Screen Modes]: https://gist.github.com/ConnerWill/d4b6c776b509add763e17f9f113fd25b<F6>
+func setWrapping(cb byte, linewrp, current bool) bool {
+	if linewrp && cb == 'l' {
+		return true
+	}
+	if linewrp && cb == 'h' {
+		return false
+	}
+	return current
+}
+
+func wrapMode(cb byte) bool {
+	return cb == '7'
 }
 
 // CursorUp moves cursor up.
@@ -768,16 +829,21 @@ func defaultAttr() Attribute {
 }
 
 // ApplySGR applies SGR parameters to an incoming attribute and returns a new Attribute.
-func ApplySGR(params []int, cur Attribute, pal Palette) (Attribute, error) { //nolint:gocyclo,gocognit
+func ApplySGR(params []int, cur Attribute, pal Palette) (Attribute, error) { //nolint:gocognit
 	attr := cur // start from current
 	if len(params) == 0 {
 		// treat empty SGR as reset per common implementations
 		return defaultAttr(), nil
 	}
-	const xterm, truecolor = 5, 2
+	const xterm256c, truecolor = 5, 2
 	i := Reset
 	for i < len(params) {
 		p := params[i]
+		standardFG := FG1st <= p && p <= FGEnd
+		standardBG := BG1st <= p && p <= BGEnd
+		intenseFG := BrightFG1st <= p && p <= BrightFGEnd
+		intenseBG := BrightBG1st <= p && p <= BrightBGEnd
+		extColor := p == SetFG || p == SetBG
 		switch {
 		case p == Reset:
 			attr = defaultAttr()
@@ -797,27 +863,25 @@ func ApplySGR(params []int, cur Attribute, pal Palette) (Attribute, error) { //n
 			attr.FG = ""
 		case p == DefaultBG:
 			attr.BG = ""
-		case FG1st <= p && p <= FGEnd:
+		case standardFG:
 			attr.FG = BasicHex(p-FG1st, false, pal)
-		case BG1st <= p && p <= BGEnd:
+		case standardBG:
 			attr.BG = BasicHex(p-BG1st, false, pal)
-		case BrightFG1st <= p && p <= BrightFGEnd:
+		case intenseFG:
 			attr.FG = BasicHex(p-BrightFG1st, true, pal)
-		case BrightBG1st <= p && p <= BrightBGEnd:
+		case intenseBG:
 			attr.BG = BasicHex(p-BrightBG1st, true, pal)
-		case p == SetFG || p == SetBG:
-			// extended color: either 5;n (256 color) or 2;r;g;b (truecolor)
+		case extColor: // extended color: either 5;n (256 color) or 2;r;g;b (true-color)
 			isFG := (p == SetFG)
 			// look ahead
-			if i+1 >= len(params) {
-				if true {
-					// malformed; ignore per permissive behavior
-					i++
-					continue
-				}
+			malformed := i+1 >= len(params)
+			if malformed {
+				// malformed; ignore per permissive behavior
+				i++
+				continue
 			}
 			mode := params[i+1]
-			if mode == xterm {
+			if mode == xterm256c {
 				vals := 2
 				// 256-color: next param is index
 				if i+vals >= len(params) {
@@ -825,11 +889,11 @@ func ApplySGR(params []int, cur Attribute, pal Palette) (Attribute, error) { //n
 					i += vals
 					continue
 				}
-				idx := params[i+vals]
+				code := params[i+vals]
 				if isFG {
-					attr.FG = XtermHex(idx, pal)
+					attr.FG = XtermHex(code, pal)
 				} else {
-					attr.BG = XtermHex(idx, pal)
+					attr.BG = XtermHex(code, pal)
 				}
 				i += 3
 				continue
@@ -841,9 +905,9 @@ func ApplySGR(params []int, cur Attribute, pal Palette) (Attribute, error) { //n
 					continue
 				}
 				if isFG {
-					attr.FG = RGB(params, i)
+					attr.FG = RGBHex(params, i)
 				} else {
-					attr.BG = RGB(params, i)
+					attr.BG = RGBHex(params, i)
 				}
 				i += 5
 				continue
@@ -860,8 +924,8 @@ func ApplySGR(params []int, cur Attribute, pal Palette) (Attribute, error) { //n
 	return attr, nil
 }
 
-// RGB converts the params into a "true color", red, green, blue hex string.
-func RGB(params []int, i int) string {
+// RGBHex converts the params into a "true color", red, green, blue hex string.
+func RGBHex(params []int, i int) string {
 	if len(params) < i+4 {
 		return ""
 	}
@@ -982,33 +1046,60 @@ func attrEqual(a, b Attribute) bool {
 	return a.FG == b.FG && a.BG == b.BG && a.Bold == b.Bold && a.Underline == b.Underline && a.Inverse == b.Inverse
 }
 
+// style contains the default Colors and palette
+type style struct {
+	palette Palette
+	fg      Color
+	bg      Color
+}
+
+// set the default colors of the palette
+func (s *style) set(p Palette) {
+	s.palette = p
+	switch p {
+	case CGA16:
+		s.fg = CGA().DefaultFG()
+		s.bg = CGA().DefaultBG()
+	case Xterm16:
+		s.fg = Xterm().DefaultFG()
+		s.bg = Xterm().DefaultBG()
+	}
+}
+
 // buildStyle takes the Attribute and returns a HTML style attribute.
-func buildStyle(a Attribute) string {
+func buildStyle(a Attribute, def style) string {
 	// Determine effective fg/bg respecting inverse
-	fg := a.FG
-	bg := a.BG
+	fg := a.FG // foreground color
+	bg := a.BG // background color
 	if a.Inverse {
 		fg, bg = bg, fg
 	}
 	parts := []string{}
+	var val Color
 	switch {
 	case a.Bold && fg != "":
-		val := Bright(Color(fg))
-		parts = append(parts, val.FG())
+		val = Bright(Color(fg), def.palette)
 	case a.Bold && fg == "":
-		parts = append(parts, CWhite.FG())
+		val = Bright(def.fg, def.palette)
 	case fg != "":
-		val := Color(fg)
-		parts = append(parts, val.FG())
+		val = Color(fg)
 	case fg == "":
-		parts = append(parts, CGray.FG())
+		val = def.fg
 	}
+	if val != "" {
+		parts = append(parts, val.FG())
+	}
+	// Don't provide a default background color when bg is empty,
+	// as this will be handled by a parent div container.
 	if bg != "" {
-		val := Color(bg)
+		// The original ANSI standard did not support bold/bright background colors.
 		// if a.Bold {
 		// 	val = Bright(val)
 		// }
-		parts = append(parts, val.BG())
+		val := Color(bg)
+		if val != "" {
+			parts = append(parts, val.BG())
+		}
 	}
 	if a.Underline {
 		parts = append(parts, "text-decoration:underline;")
@@ -1016,18 +1107,22 @@ func buildStyle(a Attribute) string {
 	return strings.Join(parts, "")
 }
 
-// Bright takes a CGA color and swaps it for a lighter variant.
-// For example, Color.CBlack (black) returns Color.CDarkGray (bright black).
+// Bright takes a palette color and swaps it for a lighter variant.
+// For example, Color.CBlack (CGA black) returns Color.CDarkGray (CGA bright black).
 //
 //nolint:mnd
-func Bright(c Color) Color {
+func Bright(c Color, pal Palette) Color {
+	standard := CGA()
+	if pal == Xterm16 {
+		standard = Xterm()
+	}
 	colors := make([]string, 16)
-	for i, x := range CGA() {
+	for i, x := range standard {
 		colors[i] = string(x)
 	}
 	match := slices.Index(colors, string(c))
 	if match >= 0 && match <= 7 {
-		return CGA()[match+8]
+		return standard[match+8]
 	}
 	return ""
 }
@@ -1045,6 +1140,7 @@ func (d *Decoder) setCursor(xp *int, yp *int) {
 	d.ensureLine(d.y)
 }
 
+// ensureLine ensures the current line exists
 func (d *Decoder) ensureLine(y int) {
 	for y >= len(d.buffer) {
 		d.buffer = append(d.buffer, []cell{})
@@ -1063,7 +1159,6 @@ func (d *Decoder) writeChar(b byte, attr Attribute) {
 	if d.charset != nil && d.charset != charmap.XUserDefined {
 		ch = string(d.charset.DecodeByte(b))
 	}
-	// ensure current line exists
 	d.ensureLine(d.y)
 	// expand line with spaces if needed
 	for len(d.currentLine) < d.x {

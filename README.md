@@ -6,14 +6,14 @@ ANSIbump takes texts encoded with ANSI escape codes and transforms it into a HTM
 
 See the [reference documentation](https://pkg.go.dev/github.com/bengarrett/ansibump) for usage, and examples, including changing the character sets and the color palette.
 
-ANSIbump was created for and is in use on the website archive Defacto2, home to [thousands of ANSI](https://defacto2.net/files/ansi) texts and artworks that are now rendered as HTML.
+ANSIbump was created for and is in use on the website archive Defacto2, home to [thousands of ANSI](https://defacto2.net/files/ansi) texts and artworks that are now rendered in HTML.
 
 Some ANSI highlights that are rendered by ANSIbump:
 
 - [The Game Gallery BBS ad](https://defacto2.net/f/ba2bcbb) from 1985 that's an ANSI rendition of Pacman.
 - [Epsilon Nine BBS ad](https://defacto2.net/f/ac22cda) from 1990 of an orbiting space station.
-- [Bart Simpson](http://localhost:1323/f/ac29cac) was a popular subject in 1991.
-- [Superheros drawings](https://defacto2.net/f/b62d8a3) were very popular themes in the mid-1990s.
+- [Bart Simpson](https://defacto2.net/f/ac29cac) was a popular subject in 1991.
+- [Comic character drawings](https://defacto2.net/f/b22decc) were very popular in the 1990s.
 
 #### Quick usage
 
@@ -35,15 +35,47 @@ func main() {
 }
 ```
 
+#### HTML
+
+ANSIbump will output a [`<div>`](https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/div) "content division" element containing colors, styles, newlines, and text.
+- The div element should be used within a [`<pre>`](https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/pre) "preformatted text" element.
+- Most ANSI text will want a custom monospaced font, [Cascadia Mono](https://github.com/microsoft/cascadia-code) handles all the [CodePage 437](https://en.wikipedia.org/wiki/Code_page_437) characters. 
+- Or use the [IBM VGA font](https://int10h.org/oldschool-pc-fonts/fontlist/font?ibm_vga_8x16) for a more authentic recreation,
+ either font will require a CSS [`@font-face`](https://developer.mozilla.org/en-US/docs/Web/CSS/@font-face) rule and [`font-family`](https://developer.mozilla.org/en-US/docs/Web/CSS/font-family) property.
+
+```html
+<html>
+  <head>
+    <title>Quick usage</title>
+  </head>
+  <style>
+    @font-face {
+      font-family: cascadia-mono;
+      src: url(CascadiaMono.woff2) format("woff2");
+    }
+    pre {
+      font-family: cascadia-mono, monospace, serif;
+    }
+  </style>
+  <body>
+    <pre><!--- ansibump output ---><div style="color:#aaa;background-color:#000;">   <span style="color:#a50;background-color:#0a0;">HI‼︎</span>   </div>
+    </pre>
+  </body>
+</html>
+```
+
 #### Not supported or known issues
 
 - ANSI.SYS blinking, [for example](https://defacto2.net/f/a922ed8). CSS blinking uses a [lot of boilerplate](https://github.com/bengarrett/RetroTxt/blob/main/ext/css/text_colors_blink.css) for each color.
-- No auto-detection for Amiga controls, `0x30 0x20 0x70` [example](https://defacto2.net/f/a92327d).
-- [CR causing newlines](https://defacto2.net/f/a522a2a) and unsupported ESC `[=7l`, `[=7h`.
+- No auto-detection for system and programming controls, [example](https://defacto2.net/f/a92327d).
+
+#### Sauce metadata
+
+ANSIbump doesn't parse any SAUCE metadata, however this can be done with a separate [bengarrett/sauce](https://github.com/bengarrett/sauce) package.
 
 #### Important
 
-ANSIbump was initially vibe coded, you can see the [original prompt, output, and read the manual changes](https://github.com/bengarrett/ansibump/blob/main/docs/vibe.md).
+ANSIbump was initially vibe coded, you can see the [original prompt, output, and read of the many needed manual changes](https://github.com/bengarrett/ansibump/blob/main/docs/vibe.md).
 
 ### Similar projects
 

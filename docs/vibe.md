@@ -2,9 +2,9 @@ ANSIbump was originally vibe coded on 2025, Oct-26 with GTP-5 mini using the fol
 
 > "in golang create a package that converters ansi escape codes including colors and cursor movement into html"
 
-The code below was the result and heavily adapted and modified for ANSIbump.
+The code below was the result and has since been heavily modified for ANSIbump.
 
-Some of the changes that were manually applied,
+Some of the many changes that were manually applied:
 
 - Support for IBM Code Pages including CP437
 - Support for color palettes
@@ -16,8 +16,8 @@ Some of the changes that were manually applied,
 - Removed the deep nested conditionals and complexity
 - Support for 1 value cursor movements commonly found in BBS era ANSI art
 - Tests, documentation, and examples
-- Bug fixes
-- Quality of life funcs to return HTML as bytes.Buffer, []bytes, or write to an io.Writer.
+- Numerous bug fixes 😂
+- Quality of life funcs to return HTML as bytes.Buffer, []bytes, or write to an io.Writer
 
 ```go
 package ansihtml
