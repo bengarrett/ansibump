@@ -66,6 +66,7 @@ type Palette uint
 const (
 	CGA16   Palette = iota // Color Graphics Adapter colorset defined by IBM for the PC in 1981
 	Xterm16                // Xterm terminal emulator program for the X Window System colorset from the mid-1980s
+	DP2                    // DP2 is a Commodore Amiga era Deluxe Paint II colorset that mimics the colors of CGA16
 )
 
 // Color code represented as hexadecimal numeric value.
@@ -76,38 +77,54 @@ const (
 type Color string
 
 const (
-	CBlack    Color = "000"    // black
-	CRed      Color = "a00"    // red
-	CGreen    Color = "0a0"    // green
-	CBrown    Color = "a50"    // yellow
-	CBlue     Color = "00a"    // blue
-	CMagenta  Color = "a0a"    // magenta
-	CCyan     Color = "0aa"    // cyan
-	CGray     Color = "aaa"    // white
-	CDarkGray Color = "555"    // bright black
-	CLRed     Color = "f55"    // bright red
-	CLGreen   Color = "5f5"    // bright green
-	CYellow   Color = "ff5"    // bright yellow
-	CLBlue    Color = "55f"    // bright blue
-	CLMagenta Color = "f5f"    // bright magenta
-	CLCyan    Color = "5ff"    // bright cyan
-	CWhite    Color = "fff"    // bright white
-	XBlack    Color = "000"    // black
-	XMarron   Color = "800000" // red
-	XGreen    Color = "008000" // green
-	XOlive    Color = "808000" // yellow
-	XNavy     Color = "000080" // blue
-	XPurple   Color = "800080" // magenta
-	XTeal     Color = "008080" // cyan
-	XSilver   Color = "c0c0c0" // white
-	XGray     Color = "808080" // bright black
-	XRed      Color = "f00"    // bright red
-	XLime     Color = "0f0"    // bright green
-	XYellow   Color = "ff0"    // bright yellow
-	XBlue     Color = "00f"    // bright blue
-	XFuchsia  Color = "f5f"    // bright magenta
-	XAqua     Color = "0ff"    // bright cyan
-	XWhite    Color = "fff"    // bright white
+	CBlack     Color = "000"    // cga black
+	CRed       Color = "a00"    // red
+	CGreen     Color = "0a0"    // green
+	CBrown     Color = "a50"    // yellow
+	CBlue      Color = "00a"    // blue
+	CMagenta   Color = "a0a"    // magenta
+	CCyan      Color = "0aa"    // cyan
+	CGray      Color = "aaa"    // white
+	CDarkGray  Color = "555"    // bright black
+	CLRed      Color = "f55"    // bright red
+	CLGreen    Color = "5f5"    // bright green
+	CYellow    Color = "ff5"    // bright yellow
+	CLBlue     Color = "55f"    // bright blue
+	CLMagenta  Color = "f5f"    // bright magenta
+	CLCyan     Color = "5ff"    // bright cyan
+	CWhite     Color = "fff"    // bright white
+	XBlack     Color = "000"    // xterm black
+	XMarron    Color = "800000" // red
+	XGreen     Color = "008000" // green
+	XOlive     Color = "808000" // yellow
+	XNavy      Color = "000080" // blue
+	XPurple    Color = "800080" // magenta
+	XTeal      Color = "008080" // cyan
+	XSilver    Color = "c0c0c0" // white
+	XGray      Color = "808080" // bright black
+	XRed       Color = "f00"    // bright red
+	XLime      Color = "0f0"    // bright green
+	XYellow    Color = "ff0"    // bright yellow
+	XBlue      Color = "00f"    // bright blue
+	XFuchsia   Color = "f5f"    // bright magenta
+	XAqua      Color = "0ff"    // bright cyan
+	XWhite     Color = "fff"    // bright white
+	DPBlack    Color = "000"    // deluxe paint ii black
+	DPRed      Color = "a80000" // red
+	DPGreen    Color = "008800" // green
+	DPBrown    Color = "a85420" // brown
+	DPBlue     Color = "0000fc" // blue
+	DPMagenta  Color = "cc0088" // magenta
+	DPCyan     Color = "00a8fc" // cyan
+	DPGray     Color = "747474" // white
+	DPDarkGray Color = "646464" // bright black
+	DPLRed     Color = "ec0000" // bright red
+	DPLGreen   Color = "88fc00" // bright green
+	DPYellow   Color = "fcec00" // bright yellow
+	DPLBlue    Color = "0074cc" // bright blue
+	DPLMagenta Color = "cc00ec" // bright magenta
+	DPLCyan    Color = "00dcdc" // bright cyan
+	DPWhite    Color = "fcfcfc" // bright white
 )
 
 // BG returns the CSS background-color property and color value.
@@ -156,6 +173,13 @@ func Xterm() Colors {
 	}
 }
 
+func DPaint2() Colors {
+	return Colors{
+		DPBlack, DPRed, DPGreen, DPBrown, DPBlue, DPMagenta, DPCyan, DPGray,
+		DPDarkGray, DPLRed, DPLGreen, DPYellow, DPLBlue, DPLMagenta, DPLCyan, DPWhite,
+	}
+}
+
 // Attribute describes styling for a single character cell.
 type Attribute struct {
 	FG        string // FG is a foreground hex color like "rrggbb" or (no leading #) or empty for default
@@ -187,7 +211,7 @@ type cell struct {
 
 // NewDecoder creates a Decoder with a given width (columns). If width <= 0, 80 is used.
 //
-// Palette can either be CGA16 or Xterm16.
+// Palette can either be CGA16, Xterm16, or DP2.
 //
 // Generally the charset of ANSI art should be [charmap.CodePage437],
 // however artworks for the Commodore Amiga can be [charmap.ISO8859_1].
@@ -965,6 +989,8 @@ func BasicHex(code int, bright bool, p Palette) string {
 		return string(CGA()[index])
 	case Xterm16:
 		return string(Xterm()[index])
+	case DP2:
+		return string(DPaint2()[index])
 	}
 	return ""
 }
@@ -1063,6 +1089,9 @@ func (s *style) set(p Palette) {
 	case Xterm16:
 		s.fg = Xterm().DefaultFG()
 		s.bg = Xterm().DefaultBG()
+	case DP2:
+		s.fg = DPaint2().DefaultFG()
+		s.bg = DPaint2().DefaultBG()
 	}
 }
 
