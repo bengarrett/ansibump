@@ -387,7 +387,7 @@ func (d *Decoder) Lines(p Palette) []string {
 func (d *Decoder) Read(r io.Reader) error { //nolint:gocyclo,gocognit
 	br := bufio.NewReader(r)
 	// current attribute applied to subsequent characters
-	cur := defaultAttr()
+	cur := defaultAttr(d.palette)
 	// codepage is used to toggle the display of ASCII control codes as IBM PC characters.
 	// the bool result mentioning "code page" in the encoding.charMap name such as "IBM Code Page 437".
 	codepage := strings.Contains(strings.ToLower(d.charset.String()), "code page")
@@ -727,7 +727,7 @@ func (d *Decoder) EraseInDisplay(params []int) error {
 		}
 		if d.x < len(d.currentLine) {
 			for i := 0; i <= d.x && i < len(d.currentLine); i++ {
-				d.currentLine[i] = cell{Attr: defaultAttr(), Char: " "}
+				d.currentLine[i] = cell{Attr: defaultAttr(d.palette), Char: " "}
 			}
 		} else {
 			d.currentLine = []cell{}
@@ -769,7 +769,7 @@ func (d *Decoder) EraseInLine(params []int) error {
 	if cursorInLine {
 		if d.x < len(d.currentLine) {
 			for i := 0; i <= d.x && i < len(d.currentLine); i++ {
-				d.currentLine[i] = cell{Attr: defaultAttr(), Char: " "}
+				d.currentLine[i] = cell{Attr: defaultAttr(d.palette), Char: " "}
 			}
 		} else {
 			d.currentLine = []cell{}
@@ -847,9 +847,13 @@ func (d *Decoder) ApplyCSI(final byte, params []int) error {
 	return nil
 }
 
-// defaultAttr returns the default Attribute (no styles).
-func defaultAttr() Attribute {
-	return Attribute{FG: "", BG: "", Bold: false, Underline: false, Inverse: false}
+// defaultAttr returns the default Attribute (no formatting and default foreground color).
+func defaultAttr(pal Palette) Attribute {
+	s := style{}
+	s.set(pal)
+	fg := s.fg
+	bg := s.bg
+	return Attribute{FG: string(fg), BG: string(bg), Bold: false, Underline: false, Inverse: false}
 }
 
 // ApplySGR applies SGR parameters to an incoming attribute and returns a new Attribute.
@@ -857,7 +861,7 @@ func ApplySGR(params []int, cur Attribute, pal Palette) (Attribute, error) { //n
 	attr := cur // start from current
 	if len(params) == 0 {
 		// treat empty SGR as reset per common implementations
-		return defaultAttr(), nil
+		return defaultAttr(pal), nil
 	}
 	const xterm256c, truecolor = 5, 2
 	i := Reset
@@ -870,7 +874,7 @@ func ApplySGR(params []int, cur Attribute, pal Palette) (Attribute, error) { //n
 		extColor := p == SetFG || p == SetBG
 		switch {
 		case p == Reset:
-			attr = defaultAttr()
+			attr = defaultAttr(pal)
 		case p == Bold:
 			attr.Bold = true
 		case p == NotBold || p == NotBoldFaint:
@@ -1196,7 +1200,7 @@ func (d *Decoder) writeChar(b byte, attr Attribute) {
 	d.ensureLine(d.y)
 	// expand line with spaces if needed
 	for len(d.currentLine) < d.x {
-		d.currentLine = append(d.currentLine, cell{Attr: defaultAttr(), Char: " "})
+		d.currentLine = append(d.currentLine, cell{Attr: defaultAttr(d.palette), Char: " "})
 	}
 	if d.x < len(d.currentLine) {
 		d.currentLine[d.x] = cell{Attr: attr, Char: ch}
