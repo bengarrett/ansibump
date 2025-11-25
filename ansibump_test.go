@@ -16,15 +16,21 @@ func ExampleBuffer() {
 	const ansi = "\x1b[0m\x1b[5;33;42mHI\x1b[0m"
 
 	// use cga palette with codepage 437
-	const cga = ansibump.CGA16
 	r := strings.NewReader(ansi)
-	buf, _ := ansibump.Buffer(r, 80, false, cga, charmap.CodePage437)
+	cust := ansibump.Customizer{
+		Width:       80,
+		AmigaParser: false,
+		Strict:      false,
+		Color:       ansibump.CGA16,
+		CharSet:     charmap.CodePage437,
+	}
+	buf, _ := cust.Buffer(r)
 	fmt.Printf("%q\n", buf.String())
 
 	// use xterm palette with codepage 437
-	const xterm = ansibump.Xterm16
 	r = strings.NewReader(ansi)
-	buf, _ = ansibump.Buffer(r, 80, false, xterm, charmap.CodePage437)
+	cust.Color = ansibump.Xterm16
+	buf, _ = cust.Buffer(r)
 	fmt.Printf("%q\n", buf.String())
 	// Output: "<div style=\"color:#aaa;background-color:#000;\"><span style=\"color:#a50;background-color:#0a0;\">HI</span></div>"
 	// "<div style=\"color:#c0c0c0;background-color:#000;\"><span style=\"color:#808000;background-color:#008000;\">HI</span></div>"
@@ -32,15 +38,22 @@ func ExampleBuffer() {
 
 func ExampleBuffer_codepage() {
 	const ansi = "\x1b[0;34;47m\xae\xaf\x1b[0m"
-	const cga = ansibump.CGA16
+	cust := ansibump.Customizer{
+		Width:       80,
+		AmigaParser: false,
+		Strict:      false,
+		Color:       ansibump.CGA16,
+		CharSet:     charmap.CodePage437,
+	}
 	// using Code Page 437
 	r := strings.NewReader(ansi)
-	buf, _ := ansibump.Buffer(r, 80, false, cga, charmap.CodePage437)
+	buf, _ := cust.Buffer(r)
 	fmt.Printf("%q\n", buf.String())
 
 	// using Latin 1 (ISO-8859-1)
 	r = strings.NewReader(ansi)
-	buf, _ = ansibump.Buffer(r, 80, false, cga, charmap.ISO8859_1)
+	cust.CharSet = charmap.ISO8859_1
+	buf, _ = cust.Buffer(r)
 	fmt.Printf("%q\n", buf.String())
 	// Output: "<div style=\"color:#aaa;background-color:#000;\"><span style=\"color:#00a;background-color:#aaa;\">«»</span></div>"
 	// "<div style=\"color:#aaa;background-color:#000;\"><span style=\"color:#00a;background-color:#aaa;\">®¯</span></div>"

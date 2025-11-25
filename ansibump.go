@@ -200,6 +200,7 @@ type Decoder struct {
 	width          int
 	defaultFG      Color
 	defaultBG      Color
+	amigaParser    bool
 	strict         bool
 }
 
@@ -209,36 +210,58 @@ type cell struct {
 	Char string
 }
 
-// NewDecoder creates a Decoder with a given width (columns). If width <= 0, 80 is used.
+// Customizer is optional, and is used to configure the parsing of the ANSI encoded text.
 //
-// Palette can either be CGA16, Xterm16, or DP2.
-//
-// Generally the charset of ANSI art should be [charmap.CodePage437],
-// however artworks for the Commodore Amiga can be [charmap.ISO8859_1].
-// Modern artworks or terminal text will usually be in UTF-8 encoding
-// which can be set with charset as a nil value or charset as [charmap.XUserDefined].
-//
-// Strict is a debug mode that will throw errors when the ANSI includes malformed
-// and invalid data or values.
-func NewDecoder(width int, strict bool, pal Palette, charset *charmap.Charmap) *Decoder {
+// Usually, the defaults work for most texts.
+// Instead, use: [ansibump.Bytes], [ansibump.String], or [ansibump.WriteTo].
+type Customizer struct {
+	// Width is the number of columns of the ANSI encoded text.
+	// If a value provided is <= 0, then a common an 80 columns value is used.
+	Width int
+	// The AmigaParser should be set to false except with edge cases where unusual
+	// Commodore Amiga specific encodings are to be parsed. When set to true:
+	//   - character 0x0C "♀︎" is a form feed controller and will be replaced with a '<br>' element.
+	//   - 0x1B,0x5B,0x1B,0x5B "←[←[" is treated as a single ANSI escape control.
+	AmigaParser bool
+	// Strict is a debug mode that will throw errors when the ANSI includes malformed and invalid data or values.
+	Strict bool
+	// Color Palette can either be CGA16, Xterm16, or DP2.
+	//   - CGA16 is the default, it is the Color Graphics Adapter colorset defined by IBM for the PC in 1981.
+	//   - Xterm16 is the Xterm terminal emulator program for the X Window System colorset from the mid-1980s.
+	//   - DP2 is a Commodore Amiga era Deluxe Paint II colorset that mimics the colors of CGA16.
+	Color Palette
+	// CharSet is the simple character encoding used by the text.
+	//
+	// Generally the charset of ANSI art should be [charmap.CodePage437],
+	// however artworks for the Commodore Amiga are often [charmap.ISO8859_1].
+	// Modern artworks or terminal text will usually be in UTF-8 encoding
+	// which can be set with CharSet = nil or CharSet = [charmap.XUserDefined].
+	CharSet *charmap.Charmap
+}
+
+// NewDecoder creates a Decoder with the given Customizer.
+func (c *Customizer) NewDecoder() *Decoder {
+	width := c.Width
 	if width <= 0 {
 		width = 80
 	}
+	charset := c.CharSet
 	if charset == nil {
 		charset = charmap.XUserDefined
 	}
 	var def style
-	def.set(pal)
+	def.set(c.Color)
 	d := &Decoder{
-		charset:   charset,
-		palette:   pal,
-		buffer:    [][]cell{{}},
-		x:         0,
-		y:         0,
-		width:     width,
-		defaultFG: def.fg,
-		defaultBG: def.bg,
-		strict:    strict,
+		charset:     charset,
+		palette:     c.Color,
+		buffer:      [][]cell{{}},
+		x:           0,
+		y:           0,
+		width:       width,
+		defaultFG:   def.fg,
+		defaultBG:   def.bg,
+		amigaParser: c.AmigaParser,
+		strict:      c.Strict,
 	}
 	d.currentLine = d.buffer[0]
 	return d
@@ -247,34 +270,89 @@ func NewDecoder(width int, strict bool, pal Palette, charset *charmap.Charmap) *
 // Buffer creates a new Buffer containing the HTML elements of the ANSI encoded text
 // found in the Reader.
 //
-// The other arguments are used by the [NewDecoder] which documents their purpose.
-func Buffer(r io.Reader, width int, strict bool, pal Palette, charset *charmap.Charmap) (*bytes.Buffer, error) {
+// The parser configurations and arguments are configured using the [Customizer].
+func (c *Customizer) Buffer(r io.Reader) (*bytes.Buffer, error) {
 	if r == nil {
 		return nil, ErrReader
 	}
-	if charset == nil {
-		charset = charmap.XUserDefined
-	}
-	d := NewDecoder(width, strict, pal, charset)
+	d := c.NewDecoder()
 	if err := d.Read(r); err != nil {
 		return nil, err
 	}
 	var b bytes.Buffer
-	out := bufio.NewWriter(&b)
-	if err := d.Write(out); err != nil {
+	w := bufio.NewWriter(&b)
+	if err := d.Write(w); err != nil {
 		return nil, err
 	}
-	if err := out.Flush(); err != nil {
+	if err := w.Flush(); err != nil {
 		return nil, fmt.Errorf("buffer out flush: %w", err)
 	}
 	return &b, nil
 }
 
+// NewDecoder creates a Decoder with a given width (columns). If width <= 0, 80 is used.
+// func NewDecoder(width int, strict bool, pal Palette, charset *charmap.Charmap) *Decoder {
+// 	if width <= 0 {
+// 		width = 80
+// 	}
+// 	if charset == nil {
+// 		charset = charmap.XUserDefined
+// 	}
+// 	var def style
+// 	def.set(pal)
+// 	d := &Decoder{
+// 		charset:   charset,
+// 		palette:   pal,
+// 		buffer:    [][]cell{{}},
+// 		x:         0,
+// 		y:         0,
+// 		width:     width,
+// 		defaultFG: def.fg,
+// 		defaultBG: def.bg,
+// 		strict:    strict,
+// 	}
+// 	d.currentLine = d.buffer[0]
+// 	return d
+// }
+//
+// // Buffer creates a new Buffer containing the HTML elements of the ANSI encoded text
+// // found in the Reader.
+// //
+// // The other arguments are used by the [NewDecoder] which documents their purpose.
+// func Buffer(r io.Reader, width int, strict bool, pal Palette, charset *charmap.Charmap) (*bytes.Buffer, error) {
+// 	if r == nil {
+// 		return nil, ErrReader
+// 	}
+// 	if charset == nil {
+// 		charset = charmap.XUserDefined
+// 	}
+// 	d := NewDecoder(width, strict, pal, charset)
+// 	if err := d.Read(r); err != nil {
+// 		return nil, err
+// 	}
+// 	var b bytes.Buffer
+// 	out := bufio.NewWriter(&b)
+// 	if err := d.Write(out); err != nil {
+// 		return nil, err
+// 	}
+// 	if err := out.Flush(); err != nil {
+// 		return nil, fmt.Errorf("buffer out flush: %w", err)
+// 	}
+// 	return &b, nil
+// }
+
 // Bytes returns the HTML elements of the ANSI encoded text found in the Reader.
 // It assumes the Reader is using IBM Code Page 437 encoding.
 // If width is <= 0, an 80 columns value is used.
 func Bytes(r io.Reader, width int) ([]byte, error) {
-	buf, err := Buffer(r, width, false, CGA16, charmap.CodePage437)
+	cust := Customizer{
+		Width:       width,
+		AmigaParser: false,
+		Strict:      false,
+		Color:       CGA16,
+		CharSet:     charmap.CodePage437,
+	}
+	buf, err := cust.Buffer(r)
 	if err != nil {
 		return nil, err
 	}
@@ -285,7 +363,14 @@ func Bytes(r io.Reader, width int) ([]byte, error) {
 // It assumes the Reader is using IBM Code Page 437 encoding.
 // If width is <= 0, an 80 columns value is used.
 func String(r io.Reader, width int) (string, error) {
-	buf, err := Buffer(r, width, false, CGA16, charmap.CodePage437)
+	cust := Customizer{
+		Width:       width,
+		AmigaParser: false,
+		Strict:      false,
+		Color:       CGA16,
+		CharSet:     charmap.CodePage437,
+	}
+	buf, err := cust.Buffer(r)
 	if err != nil {
 		return "", err
 	}
@@ -298,7 +383,14 @@ func String(r io.Reader, width int) (string, error) {
 //
 // The return int64 is the number of bytes written.
 func WriteTo(r io.Reader, w io.Writer, width int) (int64, error) {
-	buf, err := Buffer(r, width, false, CGA16, charmap.CodePage437)
+	cust := Customizer{
+		Width:       width,
+		AmigaParser: false,
+		Strict:      false,
+		Color:       CGA16,
+		CharSet:     charmap.CodePage437,
+	}
+	buf, err := cust.Buffer(r)
 	if err != nil {
 		return 0, err
 	}
@@ -332,55 +424,52 @@ func (d *Decoder) Write(w io.Writer) error {
 
 // Lines renders each buffer line into a single HTML string.
 // Each contiguous run of identical attributes is wrapped in a <span style="...">.
-func (d *Decoder) Lines(p Palette) []string {
-	var def style
-	def.set(p)
-	out := []string{}
-	for _, line := range d.buffer {
-		if len(line) == 0 {
-			out = append(out, "")
+func (d *Decoder) Lines(pal Palette) []string {
+	type span struct {
+		Attr Attribute
+		Text string
+	}
+	var defaults style
+	defaults.set(pal)
+	lines := []string{}
+	for _, cells := range d.buffer {
+		if len(cells) == 0 {
+			lines = append(lines, "")
 			continue
 		}
 		var lastAttr *Attribute
-		var run []string
-		var spans []struct {
-			Attr Attribute
-			Text string
-		}
-		for _, c := range line {
-			if lastAttr == nil || !attrEqual(*lastAttr, c.Attr) {
-				if len(run) > 0 && lastAttr != nil {
-					spans = append(spans, struct {
-						Attr Attribute
-						Text string
-					}{Attr: *lastAttr, Text: strings.Join(run, "")})
+		var elems []string
+		var spans []span
+		for _, cell := range cells {
+			if lastAttr == nil || !attrEqual(*lastAttr, cell.Attr) {
+				if len(elems) > 0 && lastAttr != nil {
+					s := strings.Join(elems, "")
+					spans = append(spans, span{Attr: *lastAttr, Text: s})
 				}
-				tmp := c.Attr
+				tmp := cell.Attr
 				lastAttr = &tmp
-				run = []string{}
+				elems = []string{}
 			}
-			run = append(run, c.Char)
+			elems = append(elems, cell.Char)
 		}
-		if len(run) > 0 && lastAttr != nil {
-			spans = append(spans, struct {
-				Attr Attribute
-				Text string
-			}{Attr: *lastAttr, Text: strings.Join(run, "")})
+		if len(elems) > 0 && lastAttr != nil {
+			s := strings.Join(elems, "")
+			spans = append(spans, span{Attr: *lastAttr, Text: s})
 		}
 		// Build HTML for line
-		var b strings.Builder
+		var line strings.Builder
 		for _, sp := range spans {
-			style := buildStyle(sp.Attr, def)
-			b.WriteString(`<span style="`)
-			b.WriteString(html.EscapeString(style))
-			b.WriteString(`">`)
+			style := buildStyle(sp.Attr, defaults)
+			line.WriteString(`<span style="`)
+			line.WriteString(html.EscapeString(style))
+			line.WriteString(`">`)
 			// escape text but preserve spaces
-			b.WriteString(html.EscapeString(sp.Text))
-			b.WriteString(`</span>`)
+			line.WriteString(html.EscapeString(sp.Text))
+			line.WriteString(`</span>`)
 		}
-		out = append(out, b.String())
+		lines = append(lines, line.String())
 	}
-	return out
+	return lines
 }
 
 // Read reads bytes from r and interprets ANSI sequences, updating the buffer.
@@ -979,7 +1068,7 @@ func clamp(v, lo, hi int) int {
 // Codes are values between 0 and 7, and any invalid codes returns a blank string.
 //
 //nolint:mnd
-func BasicHex(code int, bright bool, p Palette) string {
+func BasicHex(code int, bright bool, pal Palette) string {
 	const first, last = 0, 7
 	if code < first || code > last {
 		return ""
@@ -988,7 +1077,7 @@ func BasicHex(code int, bright bool, p Palette) string {
 	if bright {
 		index = code + 8
 	}
-	switch p {
+	switch pal {
 	case CGA16:
 		return string(CGA()[index])
 	case Xterm16:
@@ -1005,17 +1094,17 @@ func BasicHex(code int, bright bool, p Palette) string {
 // The Palette is only used for basic colors codes between 0 and 7.
 //
 //nolint:mnd
-func XtermHex(code int, p Palette) string {
+func XtermHex(code int, pal Palette) string {
 	const hex = "%02x%02x%02x"
 	if code < 0 || code > 255 {
 		return ""
 	}
 	if code <= 7 {
-		return BasicHex(code, false, p)
+		return BasicHex(code, false, pal)
 	}
 	if code <= 15 {
 		c := code - 8
-		return BasicHex(c, true, p)
+		return BasicHex(c, true, pal)
 	}
 	if code <= 255 {
 		r, g, b := XtermColors(code)
@@ -1084,9 +1173,9 @@ type style struct {
 }
 
 // set the default colors of the palette
-func (s *style) set(p Palette) {
-	s.palette = p
-	switch p {
+func (s *style) set(pal Palette) {
+	s.palette = pal
+	switch pal {
 	case CGA16:
 		s.fg = CGA().DefaultFG()
 		s.bg = CGA().DefaultBG()
@@ -1125,12 +1214,9 @@ func buildStyle(a Attribute, def style) string {
 	// Don't provide a default background color when bg is empty,
 	// as this will be handled by a parent div container.
 	if bg != "" {
-		// The original ANSI standard did not support bold/bright background colors.
-		// if a.Bold {
-		// 	val = Bright(val)
-		// }
 		val := Color(bg)
-		if val != "" {
+		const black = CBlack
+		if val != "" && val.BG() != black.BG() {
 			parts = append(parts, val.BG())
 		}
 	}
