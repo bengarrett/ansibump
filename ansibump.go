@@ -275,6 +275,7 @@ func (c *Customizer) Buffer(r io.Reader) (*bytes.Buffer, error) {
 	if r == nil {
 		return nil, ErrReader
 	}
+
 	d := c.NewDecoder()
 	if err := d.Read(r); err != nil {
 		return nil, err
@@ -289,57 +290,6 @@ func (c *Customizer) Buffer(r io.Reader) (*bytes.Buffer, error) {
 	}
 	return &b, nil
 }
-
-// NewDecoder creates a Decoder with a given width (columns). If width <= 0, 80 is used.
-// func NewDecoder(width int, strict bool, pal Palette, charset *charmap.Charmap) *Decoder {
-// 	if width <= 0 {
-// 		width = 80
-// 	}
-// 	if charset == nil {
-// 		charset = charmap.XUserDefined
-// 	}
-// 	var def style
-// 	def.set(pal)
-// 	d := &Decoder{
-// 		charset:   charset,
-// 		palette:   pal,
-// 		buffer:    [][]cell{{}},
-// 		x:         0,
-// 		y:         0,
-// 		width:     width,
-// 		defaultFG: def.fg,
-// 		defaultBG: def.bg,
-// 		strict:    strict,
-// 	}
-// 	d.currentLine = d.buffer[0]
-// 	return d
-// }
-//
-// // Buffer creates a new Buffer containing the HTML elements of the ANSI encoded text
-// // found in the Reader.
-// //
-// // The other arguments are used by the [NewDecoder] which documents their purpose.
-// func Buffer(r io.Reader, width int, strict bool, pal Palette, charset *charmap.Charmap) (*bytes.Buffer, error) {
-// 	if r == nil {
-// 		return nil, ErrReader
-// 	}
-// 	if charset == nil {
-// 		charset = charmap.XUserDefined
-// 	}
-// 	d := NewDecoder(width, strict, pal, charset)
-// 	if err := d.Read(r); err != nil {
-// 		return nil, err
-// 	}
-// 	var b bytes.Buffer
-// 	out := bufio.NewWriter(&b)
-// 	if err := d.Write(out); err != nil {
-// 		return nil, err
-// 	}
-// 	if err := out.Flush(); err != nil {
-// 		return nil, fmt.Errorf("buffer out flush: %w", err)
-// 	}
-// 	return &b, nil
-// }
 
 // Bytes returns the HTML elements of the ANSI encoded text found in the Reader.
 // It assumes the Reader is using IBM Code Page 437 encoding.
@@ -472,8 +422,55 @@ func (d *Decoder) Lines(pal Palette) []string {
 	return lines
 }
 
+func pipeReplaceAll(r io.Reader, old, replacement []byte) io.Reader { //nolint:gocognit
+	pr, pw := io.Pipe()
+	const size = 32 * 1024
+	go func() {
+		defer pw.Close()
+		buf := make([]byte, size)
+		var carry []byte
+		for {
+			n, err := r.Read(buf)
+			if n > 0 { //nolint:nestif
+				data := carry
+				data = append(data, buf[:n]...)
+				// keep up to len(old)-1 bytes as carry for boundary matches
+				keep := 0
+				if len(old) > 1 {
+					keep = len(old) - 1
+				}
+				if len(data) > keep {
+					head := data[:len(data)-keep]
+					head = bytes.ReplaceAll(head, old, replacement)
+					if _, werr := pw.Write(head); werr != nil {
+						return
+					}
+					carry = append(carry[:0], data[len(data)-keep:]...)
+				} else {
+					carry = append(carry[:0], data...)
+				}
+			}
+			if err != nil {
+				if err == io.EOF {
+					if len(carry) > 0 {
+						out := bytes.ReplaceAll(carry, old, replacement)
+						_, _ = pw.Write(out)
+					}
+					return
+				}
+				_ = pw.CloseWithError(err)
+				return
+			}
+		}
+	}()
+	return pr
+}
+
 // Read reads bytes from r and interprets ANSI sequences, updating the buffer.
 func (d *Decoder) Read(r io.Reader) error { //nolint:gocyclo,gocognit
+	if d.amigaParser {
+		r = pipeReplaceAll(r, []byte{0x1b, 0x5b, 0x1b, 0x5b}, []byte{0x1b, 0x5b})
+	}
 	br := bufio.NewReader(r)
 	// current attribute applied to subsequent characters
 	cur := defaultAttr(d.palette)
