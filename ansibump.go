@@ -469,7 +469,16 @@ func pipeReplaceAll(r io.Reader, old, replacement []byte) io.Reader { //nolint:g
 // Read reads bytes from r and interprets ANSI sequences, updating the buffer.
 func (d *Decoder) Read(r io.Reader) error { //nolint:gocyclo,gocognit
 	if d.amigaParser {
+		const cent, space = 0x9b, 0x20
+		// fixes for broken amiga ansis found in the wild.
+		// r = pipeReplaceAll(r, []byte{cent, space, byte('p')}, []byte{})
+		r = pipeReplaceAll(r, []byte{0x1b, byte('c'), 0x0c, cent}, []byte{})
+		r = pipeReplaceAll(r, []byte{byte('0'), space, byte('p'), 0x0a}, []byte{byte('\n')})
+		r = pipeReplaceAll(r, []byte{0x1b, 0x5b, 0x30, space, 0x70, 0x0c}, []byte{})
 		r = pipeReplaceAll(r, []byte{0x1b, 0x5b, 0x1b, 0x5b}, []byte{0x1b, 0x5b})
+		r = pipeReplaceAll(r, []byte{0x1b, 0x5b, 0x30, space}, []byte{space})
+		r = pipeReplaceAll(r, []byte{0x1b, 0x5b, byte('3'), byte('4'), space},
+			[]byte{0x1b, 0x5b, byte('3'), byte('4'), byte('m'), space})
 	}
 	br := bufio.NewReader(r)
 	// current attribute applied to subsequent characters
