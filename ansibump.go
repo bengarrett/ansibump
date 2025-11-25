@@ -1141,9 +1141,14 @@ func buildStyle(a Attribute, def style) string {
 //
 //nolint:mnd
 func Bright(c Color, pal Palette) Color {
-	standard := CGA()
-	if pal == Xterm16 {
+	var standard Colors
+	switch pal {
+	case CGA16:
+		standard = CGA()
+	case Xterm16:
 		standard = Xterm()
+	case DP2:
+		standard = DPaint2()
 	}
 	colors := make([]string, 16)
 	for i, x := range standard {
