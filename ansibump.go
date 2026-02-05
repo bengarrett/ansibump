@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"html"
-	"html/template"
 	"io"
 	"slices"
 	"strings"
@@ -207,7 +206,7 @@ type Decoder struct {
 // cell in the output buffer
 type cell struct {
 	Attr Attribute
-	Char string
+	Char rune
 }
 
 // Customizer is optional, and is used to configure the parsing of the ANSI encoded text.
@@ -360,14 +359,35 @@ func (d *Decoder) Write(w io.Writer) error {
 	// build default color values if possible: fallback to defaults in Decoder
 	defFg := d.defaultFG
 	defBg := d.defaultBG
-	t, err := template.New("ansi").Parse(
-		`{{define "T"}}<div style="` + defFg.FG() + defBg.BG() + `">{{ . }}</div>{{end}}`)
-	if err != nil {
-		return fmt.Errorf("write template parse: %w", err)
+
+	// Write HTML directly without template overhead
+	if _, err := io.WriteString(w, `<div style="`); err != nil {
+		return fmt.Errorf("write opening div: %w", err)
 	}
-	if err := t.ExecuteTemplate(w, "T",
-		template.HTML(strings.Join(lines, "\n"))); err != nil { //nolint:gosec
-		return fmt.Errorf("write template execute: %w", err)
+	if _, err := io.WriteString(w, defFg.FG()); err != nil {
+		return fmt.Errorf("write fg color: %w", err)
+	}
+	if _, err := io.WriteString(w, defBg.BG()); err != nil {
+		return fmt.Errorf("write bg color: %w", err)
+	}
+	if _, err := io.WriteString(w, `">`); err != nil {
+		return fmt.Errorf("write div opening: %w", err)
+	}
+
+	// Write lines directly without strings.Join allocation
+	for i, line := range lines {
+		if i > 0 {
+			if _, err := io.WriteString(w, "\n"); err != nil {
+				return fmt.Errorf("write newline: %w", err)
+			}
+		}
+		if _, err := io.WriteString(w, line); err != nil {
+			return fmt.Errorf("write line: %w", err)
+		}
+	}
+
+	if _, err := io.WriteString(w, `</div>`); err != nil {
+		return fmt.Errorf("write closing div: %w", err)
 	}
 	return nil
 }
@@ -388,23 +408,29 @@ func (d *Decoder) Lines(pal Palette) []string {
 			continue
 		}
 		var lastAttr *Attribute
-		var elems []string
+		elems := make([]rune, 0, len(cells))
 		var spans []span
 		for _, cell := range cells {
 			if lastAttr == nil || !attrEqual(*lastAttr, cell.Attr) {
 				if len(elems) > 0 && lastAttr != nil {
-					s := strings.Join(elems, "")
-					spans = append(spans, span{Attr: *lastAttr, Text: s})
+					var sb strings.Builder
+					for _, e := range elems {
+						sb.WriteRune(e)
+					}
+					spans = append(spans, span{Attr: *lastAttr, Text: sb.String()})
 				}
 				tmp := cell.Attr
 				lastAttr = &tmp
-				elems = []string{}
+				elems = elems[:0]
 			}
 			elems = append(elems, cell.Char)
 		}
 		if len(elems) > 0 && lastAttr != nil {
-			s := strings.Join(elems, "")
-			spans = append(spans, span{Attr: *lastAttr, Text: s})
+			var sb strings.Builder
+			for _, e := range elems {
+				sb.WriteRune(e)
+			}
+			spans = append(spans, span{Attr: *lastAttr, Text: sb.String()})
 		}
 		// Build HTML for line
 		var line strings.Builder
@@ -822,7 +848,7 @@ func (d *Decoder) EraseInDisplay(params []int) error {
 		}
 		if d.x < len(d.currentLine) {
 			for i := 0; i <= d.x && i < len(d.currentLine); i++ {
-				d.currentLine[i] = cell{Attr: defaultAttr(d.palette), Char: " "}
+				d.currentLine[i] = cell{Attr: defaultAttr(d.palette), Char: ' '}
 			}
 		} else {
 			d.currentLine = []cell{}
@@ -864,7 +890,7 @@ func (d *Decoder) EraseInLine(params []int) error {
 	if cursorInLine {
 		if d.x < len(d.currentLine) {
 			for i := 0; i <= d.x && i < len(d.currentLine); i++ {
-				d.currentLine[i] = cell{Attr: defaultAttr(d.palette), Char: " "}
+				d.currentLine[i] = cell{Attr: defaultAttr(d.palette), Char: ' '}
 			}
 		} else {
 			d.currentLine = []cell{}
@@ -1285,14 +1311,14 @@ func (d *Decoder) newline() {
 
 // writeChar writes a printable character at the cursor location using given attribute.
 func (d *Decoder) writeChar(b byte, attr Attribute) {
-	ch := string(b)
+	ch := rune(b)
 	if d.charset != nil && d.charset != charmap.XUserDefined {
-		ch = string(d.charset.DecodeByte(b))
+		ch = d.charset.DecodeByte(b)
 	}
 	d.ensureLine(d.y)
 	// expand line with spaces if needed
 	for len(d.currentLine) < d.x {
-		d.currentLine = append(d.currentLine, cell{Attr: defaultAttr(d.palette), Char: " "})
+		d.currentLine = append(d.currentLine, cell{Attr: defaultAttr(d.palette), Char: ' '})
 	}
 	if d.x < len(d.currentLine) {
 		d.currentLine[d.x] = cell{Attr: attr, Char: ch}
