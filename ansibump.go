@@ -747,12 +747,12 @@ func (d *Decoder) CursorBack(params []int) error {
 func (d *Decoder) CursorNextLine(params []int) error {
 	if len(params) == 0 {
 		n := d.y + 1
-		d.setCursor(ptrInt(0), &n)
+		d.setCursor(new(0), &n)
 		return nil
 	}
 	if len(params) == 1 {
 		n := d.y + params[0]
-		d.setCursor(ptrInt(0), &n)
+		d.setCursor(new(0), &n)
 		return nil
 	}
 	if d.strict {
@@ -766,12 +766,12 @@ func (d *Decoder) CursorNextLine(params []int) error {
 func (d *Decoder) CursorPreviousLine(params []int) error {
 	if len(params) == 0 {
 		n := d.y - 1
-		d.setCursor(ptrInt(0), &n)
+		d.setCursor(new(0), &n)
 		return nil
 	}
 	if len(params) == 1 {
 		n := d.y - params[0]
-		d.setCursor(ptrInt(0), &n)
+		d.setCursor(new(0), &n)
 		return nil
 	}
 	if d.strict {
@@ -1069,7 +1069,6 @@ func ApplySGR(params []int, cur Attribute, pal Palette) (Attribute, error) { //n
 		}
 		i++
 	}
-	// fmt.Printf("%+v\n", attr)
 	return attr, nil
 }
 
@@ -1306,7 +1305,7 @@ func (d *Decoder) ensureLine(y int) {
 
 // newline moves cursor to start of next line
 func (d *Decoder) newline() {
-	d.setCursor(ptrInt(0), ptrInt(d.y+1))
+	d.setCursor(new(0), new(d.y+1))
 }
 
 // writeChar writes a printable character at the cursor location using given attribute.
@@ -1331,5 +1330,3 @@ func (d *Decoder) writeChar(b byte, attr Attribute) {
 		d.newline()
 	}
 }
-
-func ptrInt(v int) *int { return &v }
