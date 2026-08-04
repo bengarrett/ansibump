@@ -355,6 +355,7 @@ func (d *Decoder) Write(w io.Writer) error {
 	if w == nil {
 		w = io.Discard
 	}
+	const format = "write %s: %w"
 	lines := d.Lines(d.palette)
 	// build default color values if possible: fallback to defaults in Decoder
 	defFg := d.defaultFG
@@ -362,32 +363,32 @@ func (d *Decoder) Write(w io.Writer) error {
 
 	// Write HTML directly without template overhead
 	if _, err := io.WriteString(w, `<div style="`); err != nil {
-		return fmt.Errorf("write opening div: %w", err)
+		return fmt.Errorf(format, "opening div", err)
 	}
 	if _, err := io.WriteString(w, defFg.FG()); err != nil {
-		return fmt.Errorf("write fg color: %w", err)
+		return fmt.Errorf(format, "fg color", err)
 	}
 	if _, err := io.WriteString(w, defBg.BG()); err != nil {
-		return fmt.Errorf("write bg color: %w", err)
+		return fmt.Errorf(format, "bg color", err)
 	}
 	if _, err := io.WriteString(w, `">`); err != nil {
-		return fmt.Errorf("write div opening: %w", err)
+		return fmt.Errorf(format, "div opening", err)
 	}
 
 	// Write lines directly without strings.Join allocation
 	for i, line := range lines {
 		if i > 0 {
 			if _, err := io.WriteString(w, "\n"); err != nil {
-				return fmt.Errorf("write newline: %w", err)
+				return fmt.Errorf(format, "newline", err)
 			}
 		}
 		if _, err := io.WriteString(w, line); err != nil {
-			return fmt.Errorf("write line: %w", err)
+			return fmt.Errorf(format, "line", err)
 		}
 	}
 
 	if _, err := io.WriteString(w, `</div>`); err != nil {
-		return fmt.Errorf("write closing div: %w", err)
+		return fmt.Errorf(format, "closing div", err)
 	}
 	return nil
 }
@@ -494,6 +495,7 @@ func pipeReplaceAll(r io.Reader, old, replacement []byte) io.Reader { //nolint:g
 
 // Read reads bytes from r and interprets ANSI sequences, updating the buffer.
 func (d *Decoder) Read(r io.Reader) error { //nolint:gocyclo,gocognit
+	const format = "play %s reader: %w"
 	if d.amigaParser {
 		const cent, space = 0x9b, 0x20
 		// fixes for broken amiga ansis found in the wild.
@@ -520,7 +522,7 @@ func (d *Decoder) Read(r io.Reader) error { //nolint:gocyclo,gocognit
 			break
 		}
 		if err != nil {
-			return fmt.Errorf("play byte reader: %w", err)
+			return fmt.Errorf(format, "byte", err)
 		}
 		if b >= space {
 			d.writeChar(b, cur)
@@ -542,7 +544,7 @@ func (d *Decoder) Read(r io.Reader) error { //nolint:gocyclo,gocognit
 				return nil
 			}
 			if err != nil {
-				return fmt.Errorf("play sequence reader: %w", err)
+				return fmt.Errorf(format, "sequence", err)
 			}
 			if nb != '[' {
 				// We only handle CSI sequences (ESC [ ... )
@@ -562,7 +564,7 @@ func (d *Decoder) Read(r io.Reader) error { //nolint:gocyclo,gocognit
 					break
 				}
 				if err != nil {
-					return fmt.Errorf("play character reader: %w", err)
+					return fmt.Errorf(format, "character", err)
 				}
 				if cb == '=' {
 					setmode = true
@@ -1160,7 +1162,10 @@ func XtermColors(code int) (int, int, int) {
 	if code >= 232 && code <= 255 {
 		return XtermGray(code)
 	}
-	return -1, -1, -1
+	invalid := func() (int, int, int) {
+		return -1, -1, -1
+	}
+	return invalid()
 }
 
 // XtermColor returns the RGB values for non-system Xterm colors.
@@ -1252,7 +1257,8 @@ func buildStyle(a Attribute, def style) string {
 		}
 	}
 	if a.Underline {
-		parts = append(parts, "text-decoration:underline;")
+		const underline = "text-decoration:underline;"
+		parts = append(parts, underline)
 	}
 	return strings.Join(parts, "")
 }
