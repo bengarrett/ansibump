@@ -1,10 +1,11 @@
-version: "2"
+version: '2'
 linters:
   default: all
   disable:
     - depguard
     - exhaustruct
     - funlen
+    - gomodguard
     - nlreturn
     - noinlineerr
     - varnamelen

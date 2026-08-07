@@ -60,3 +60,7 @@ tasks:
     desc: 'Run the test suite with the slower race detection.'
     cmds:
       - go test -count 1 -race ./...
+  testc:
+    desc: 'Run the test suite with coverage output to the browser.'
+    cmds:
+      - go test -coverprofile=coverage.out ./... && go tool cover -html=coverage.out

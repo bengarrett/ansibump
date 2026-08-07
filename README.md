@@ -1,6 +1,6 @@
 # ANSIbump
+
 [![Go Reference](https://pkg.go.dev/badge/github.com/bengarrett/ansibump.svg)](https://pkg.go.dev/github.com/bengarrett/ansibump)
-[![Go Report Card](https://goreportcard.com/badge/github.com/bengarrett/ansibump)](https://goreportcard.com/report/github.com/bengarrett/ansibump)
 
 ANSIbump takes texts encoded with ANSI escape codes and transforms it into a HTML fragment for use in a template or webpage.
 
@@ -38,10 +38,11 @@ func main() {
 #### HTML
 
 ANSIbump will output a [`<div>`](https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/div) "content division" element containing colors, styles, newlines, and text.
+
 - The div element should be used within a [`<pre>`](https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/pre) "preformatted text" element.
-- Most ANSI text will want a custom monospaced font, [Cascadia Mono](https://github.com/microsoft/cascadia-code) handles all the [CodePage 437](https://en.wikipedia.org/wiki/Code_page_437) characters. 
+- Most ANSI text will want a custom monospaced font, [Cascadia Mono](https://github.com/microsoft/cascadia-code) handles all the [CodePage 437](https://en.wikipedia.org/wiki/Code_page_437) characters.
 - Or use the [IBM VGA font](https://int10h.org/oldschool-pc-fonts/fontlist/font?ibm_vga_8x16) for a more authentic recreation,
- either font will require a CSS [`@font-face`](https://developer.mozilla.org/en-US/docs/Web/CSS/@font-face) rule and [`font-family`](https://developer.mozilla.org/en-US/docs/Web/CSS/font-family) property.
+  either font will require a CSS [`@font-face`](https://developer.mozilla.org/en-US/docs/Web/CSS/@font-face) rule and [`font-family`](https://developer.mozilla.org/en-US/docs/Web/CSS/font-family) property.
 
 ```html
 <html>
@@ -51,7 +52,7 @@ ANSIbump will output a [`<div>`](https://developer.mozilla.org/en-US/docs/Web/HT
   <style>
     @font-face {
       font-family: cascadia-mono;
-      src: url(CascadiaMono.woff2) format("woff2");
+      src: url(CascadiaMono.woff2) format('woff2');
     }
     pre {
       font-family: cascadia-mono, monospace, serif;
@@ -84,4 +85,3 @@ ANSIbump was initially vibe coded, you can see the [original prompt, output, and
 - [RetroTxt](https://docs.retrotxt.com/) a web browser extension that renders ANSI as HTML in a tab.
 - [Ansilove](https://github.com/ansilove) is a collection of tools to convert ANSI to images.
 - [Ultimate Oldschool PC Font Pack](https://int10h.org/oldschool-pc-fonts/) offers various retro DOS and PC fonts.
-
