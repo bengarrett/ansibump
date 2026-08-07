@@ -271,6 +271,7 @@ func (c *Customizer) NewDecoder() *Decoder {
 //
 // The parser configurations and arguments are configured using the [Customizer].
 func (c *Customizer) Buffer(r io.Reader) (*bytes.Buffer, error) {
+	const format = "buffer out flush: %w"
 	if r == nil {
 		return nil, ErrReader
 	}
@@ -285,7 +286,7 @@ func (c *Customizer) Buffer(r io.Reader) (*bytes.Buffer, error) {
 		return nil, err
 	}
 	if err := w.Flush(); err != nil {
-		return nil, fmt.Errorf("buffer out flush: %w", err)
+		return nil, fmt.Errorf(format, err)
 	}
 	return &b, nil
 }
@@ -332,6 +333,7 @@ func String(r io.Reader, width int) (string, error) {
 //
 // The return int64 is the number of bytes written.
 func WriteTo(r io.Reader, w io.Writer, width int) (int64, error) {
+	const format = "buffer write to: %w"
 	cust := Customizer{
 		Width:       width,
 		AmigaParser: false,
@@ -345,17 +347,17 @@ func WriteTo(r io.Reader, w io.Writer, width int) (int64, error) {
 	}
 	i, err := buf.WriteTo(w)
 	if err != nil {
-		return 0, fmt.Errorf("buffer write to: %w", err)
+		return 0, fmt.Errorf(format, err)
 	}
 	return i, nil
 }
 
 // Write writes to w the full HTML fragment with outer div using default colors and inner lines joined with newlines.
 func (d *Decoder) Write(w io.Writer) error {
+	const format = "write %s: %w"
 	if w == nil {
 		w = io.Discard
 	}
-	const format = "write %s: %w"
 	lines := d.Lines(d.palette)
 	// build default color values if possible: fallback to defaults in Decoder
 	defFg := d.defaultFG
@@ -671,6 +673,7 @@ func wrapMode(cb byte) bool {
 // CursorUp moves cursor up.
 // Attr: CUU.
 func (d *Decoder) CursorUp(params []int) error {
+	const format = "CUU A: %w: %d"
 	if len(params) == 0 {
 		n := d.y - 1
 		d.setCursor(nil, &n)
@@ -682,7 +685,7 @@ func (d *Decoder) CursorUp(params []int) error {
 		return nil
 	}
 	if d.strict {
-		return fmt.Errorf("CUU A: %w: %d", ErrExpect0or1, params)
+		return fmt.Errorf(format, ErrExpect0or1, params)
 	}
 	return nil
 }
@@ -690,6 +693,7 @@ func (d *Decoder) CursorUp(params []int) error {
 // CursorDown moves cursor down.
 // Attr: CUD.
 func (d *Decoder) CursorDown(params []int) error {
+	const format = "CUD B: %w: %d"
 	if len(params) == 0 {
 		n := d.y + 1
 		d.setCursor(nil, &n)
@@ -701,7 +705,7 @@ func (d *Decoder) CursorDown(params []int) error {
 		return nil
 	}
 	if d.strict {
-		return fmt.Errorf("CUD B: %w: %d", ErrExpect0or1, params)
+		return fmt.Errorf(format, ErrExpect0or1, params)
 	}
 	return nil
 }
@@ -709,6 +713,7 @@ func (d *Decoder) CursorDown(params []int) error {
 // CursorForward moves cursor forward.
 // Attr: CUF.
 func (d *Decoder) CursorForward(params []int) error {
+	const format = "CUF C: %w: %d"
 	if len(params) == 0 {
 		n := d.x + 1
 		d.setCursor(&n, nil)
@@ -720,7 +725,7 @@ func (d *Decoder) CursorForward(params []int) error {
 		return nil
 	}
 	if d.strict {
-		return fmt.Errorf("CUF C: %w: %d", ErrExpect0or1, params)
+		return fmt.Errorf(format, ErrExpect0or1, params)
 	}
 	return nil
 }
@@ -728,6 +733,7 @@ func (d *Decoder) CursorForward(params []int) error {
 // CursorBack moves cursor back.
 // Attr: CUB.
 func (d *Decoder) CursorBack(params []int) error {
+	const format = "CUB D: %w: %d"
 	if len(params) == 0 {
 		n := d.x - 1
 		d.setCursor(&n, nil)
@@ -739,7 +745,7 @@ func (d *Decoder) CursorBack(params []int) error {
 		return nil
 	}
 	if d.strict {
-		return fmt.Errorf("CUB D: %w: %d", ErrExpect0or1, params)
+		return fmt.Errorf(format, ErrExpect0or1, params)
 	}
 	return nil
 }
@@ -747,6 +753,7 @@ func (d *Decoder) CursorBack(params []int) error {
 // CursorNextLine moves cursor down to the beginning of the line.
 // Attr: CNL.
 func (d *Decoder) CursorNextLine(params []int) error {
+	const format = "CNL E: %w: %d"
 	if len(params) == 0 {
 		n := d.y + 1
 		d.setCursor(new(0), &n)
@@ -758,7 +765,7 @@ func (d *Decoder) CursorNextLine(params []int) error {
 		return nil
 	}
 	if d.strict {
-		return fmt.Errorf("CNL E: %w: %d", ErrExpect0or1, params)
+		return fmt.Errorf(format, ErrExpect0or1, params)
 	}
 	return nil
 }
@@ -766,6 +773,7 @@ func (d *Decoder) CursorNextLine(params []int) error {
 // CursorPreviousLine moves cursor up to the beginning of the line.
 // Attr: CPL.
 func (d *Decoder) CursorPreviousLine(params []int) error {
+	const format = "CPL F: %w: %d"
 	if len(params) == 0 {
 		n := d.y - 1
 		d.setCursor(new(0), &n)
@@ -777,7 +785,7 @@ func (d *Decoder) CursorPreviousLine(params []int) error {
 		return nil
 	}
 	if d.strict {
-		return fmt.Errorf("CPL F: %w: %d", ErrExpect0or1, params)
+		return fmt.Errorf(format, ErrExpect0or1, params)
 	}
 	return nil
 }
@@ -785,13 +793,14 @@ func (d *Decoder) CursorPreviousLine(params []int) error {
 // CursorHorizontalAbsolute moves the cursor to column.
 // Attr: CHA.
 func (d *Decoder) CursorHorizontalAbsolute(params []int) error {
+	const format = "CHA G: %w: %d"
 	if len(params) == 1 {
 		n := params[0]
 		d.setCursor(&n, nil)
 		return nil
 	}
 	if d.strict {
-		return fmt.Errorf("CHA G: %w: %d", ErrExpect1, params)
+		return fmt.Errorf(format, ErrExpect1, params)
 	}
 	return nil
 }
@@ -799,6 +808,7 @@ func (d *Decoder) CursorHorizontalAbsolute(params []int) error {
 // CursorPosition moves the cursor to row and column.
 // Attr: CUP.
 func (d *Decoder) CursorPosition(params []int) error {
+	const format = "CUP H/f: %w: %d"
 	if len(params) == 0 {
 		x := 0
 		y := 0
@@ -813,7 +823,7 @@ func (d *Decoder) CursorPosition(params []int) error {
 		return nil
 	}
 	if d.strict {
-		return fmt.Errorf("CUP H/f: %w: %d", ErrExpect0or2, params)
+		return fmt.Errorf(format, ErrExpect0or2, params)
 	}
 	// return nil
 	if len(params) == 1 {
@@ -828,6 +838,7 @@ func (d *Decoder) CursorPosition(params []int) error {
 // EraseInDisplay clears part of the screen.
 // Attr: ED.
 func (d *Decoder) EraseInDisplay(params []int) error {
+	const format = "ED J: %w: %d"
 	// 0 or empty: from cursor to end of screen
 	cursorToEOS := len(params) == 0 || (len(params) == 1 && params[0] == 0)
 	if cursorToEOS {
@@ -870,7 +881,7 @@ func (d *Decoder) EraseInDisplay(params []int) error {
 		return nil
 	}
 	if d.strict {
-		return fmt.Errorf("ED J: %w: %d", ErrRecognized, params)
+		return fmt.Errorf(format, ErrRecognized, params)
 	}
 	return nil
 }
@@ -878,6 +889,7 @@ func (d *Decoder) EraseInDisplay(params []int) error {
 // EraseInLine part of the line.
 // Attr: EL.
 func (d *Decoder) EraseInLine(params []int) error {
+	const format = "EL K: %w: %d"
 	// 0 or empty: from cursor to end of line
 	cursorToEOL := len(params) == 0 || (len(params) == 1 && params[0] == 0)
 	if cursorToEOL {
@@ -907,7 +919,7 @@ func (d *Decoder) EraseInLine(params []int) error {
 		d.buffer[d.y] = d.currentLine
 	}
 	if d.strict {
-		return fmt.Errorf("EL K: %w: %d", ErrRecognized, params)
+		return fmt.Errorf(format, ErrRecognized, params)
 	}
 	return nil
 }
@@ -915,8 +927,9 @@ func (d *Decoder) EraseInLine(params []int) error {
 // SaveCursorPosition saves the cursor state for later use.
 // Abbr: RCP, SCORC.
 func (d *Decoder) SaveCursorPosition(params []int) error {
+	const format = "SCP s: %w: %d"
 	if len(params) != 0 && d.strict {
-		return fmt.Errorf("SCP s: %w: %d", ErrUnexpected, params)
+		return fmt.Errorf(format, ErrUnexpected, params)
 	}
 	d.savedX = d.x
 	d.savedY = d.y
@@ -926,8 +939,9 @@ func (d *Decoder) SaveCursorPosition(params []int) error {
 // RestoreCursorPosition restores the saved cursor state.
 // Abbr: SCP, SCOSC.
 func (d *Decoder) RestoreCursorPosition(params []int) error {
+	const format = "RCP u: %w: %d"
 	if len(params) != 0 && d.strict {
-		return fmt.Errorf("RCP u: %w: %d", ErrUnexpected, params)
+		return fmt.Errorf(format, ErrUnexpected, params)
 	}
 	d.setCursor(&d.savedX, &d.savedY)
 	return nil

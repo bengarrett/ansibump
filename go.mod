@@ -1,6 +1,6 @@
 module github.com/bengarrett/ansibump
 
-go 1.26.2
+go 1.26.5
 
 require (
 	github.com/nalgeon/be v0.3.0
