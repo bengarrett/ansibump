@@ -4,17 +4,12 @@ linters:
   disable:
     - depguard
     - exhaustruct
-    - funlen
     - gomodguard
     - nlreturn
     - noinlineerr
     - varnamelen
     - wsl
     - wsl_v5
-    # temp disabled
-    - cyclop
-    - godot
-    - godox
   exclusions:
     generated: lax
     presets:
@@ -29,6 +24,8 @@ linters:
     rules:
       - path: '(.+)_test\.go'
         linters:
+          - funlen
+          - goconst
           - lll
 formatters:
   enable:

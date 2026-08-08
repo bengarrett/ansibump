@@ -28,10 +28,10 @@ import (
 )
 
 func main() {
-	file, _ := os.Open("file.ans")
+	input, _ := os.Open("file.ans")
 	defer file.Close()
 	const columns = 80
-	_, _ = ansibump.WriteTo(file, os.Stdout, columns)
+	_, _ = ansibump.WriteTo(input, os.Stdout, columns)
 }
 ```
 
