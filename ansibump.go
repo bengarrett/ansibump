@@ -1,10 +1,13 @@
 // Package ansibump converts ANSI escape sequences such as colors,
 // cursor movements, and character deletions, into a HTML representation.
+//
+//nolint:cyclop,gochecknoglobals
 package ansibump
 
 import (
 	"bufio"
 	"bytes"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"html"
@@ -124,6 +127,13 @@ const (
 	DPLMagenta Color = "cc00ec" // bright magenta
 	DPLCyan    Color = "00dcdc" // bright cyan
 	DPWhite    Color = "fcfcfc" // bright white
+)
+
+const (
+	cent      = 0x9b
+	space     = 0x20
+	last      = 255
+	underline = "text-decoration:underline;"
 )
 
 // BG returns the CSS background-color property and color value.
@@ -259,7 +269,7 @@ func NewDecoder(c *Customizer) *Decoder {
 	var def style
 	def.set(c.Color)
 
-	d := &Decoder{
+	return &Decoder{
 		charset:     charset,
 		palette:     c.Color,
 		buffer:      singleEmptyRow,
@@ -271,7 +281,6 @@ func NewDecoder(c *Customizer) *Decoder {
 		amigaParser: c.AmigaParser,
 		strict:      c.Strict,
 	}
-	return d
 }
 
 // Bytes returns the HTML elements of the ANSI encoded text found in the Reader.
@@ -329,11 +338,7 @@ func Bytes(r io.Reader, width int) ([]byte, error) {
 		Color:       CGA16,
 		CharSet:     charmap.CodePage437,
 	}
-	p, err := cust.Bytes(r)
-	if err != nil {
-		return nil, err
-	}
-	return p, nil
+	return cust.Bytes(r)
 }
 
 // String returns the HTML elements of the ANSI encoded text found in the Reader.
@@ -347,11 +352,7 @@ func String(r io.Reader, width int) (string, error) {
 		Color:       CGA16,
 		CharSet:     charmap.CodePage437,
 	}
-	s, err := cust.String(r)
-	if err != nil {
-		return "", err
-	}
-	return s, nil
+	return cust.String(r)
 }
 
 // WriteTo writes to w the HTML elements of the ANSI encoded text found in the Reader.
@@ -360,7 +361,6 @@ func String(r io.Reader, width int) (string, error) {
 //
 // The return int is the number of bytes written.
 func WriteTo(r io.Reader, w io.Writer, width int) (int, error) {
-	const format = "buffer write to: %w"
 	cust := Customizer{
 		Width:       width,
 		AmigaParser: false,
@@ -372,10 +372,12 @@ func WriteTo(r io.Reader, w io.Writer, width int) (int, error) {
 	if err != nil {
 		return 0, err
 	}
+
 	i, err := w.Write(p)
 	if err != nil {
-		return 0, fmt.Errorf(format, err)
+		return 0, fmt.Errorf("buffer write to: %w", err)
 	}
+
 	return i, nil
 }
 
@@ -410,7 +412,8 @@ func (d *Decoder) Write(w io.Writer) error {
 		write(line)
 	}
 	write(`</div>`)
-	return nil
+
+	return err
 }
 
 // Lines renders each buffer line into a single HTML string.
@@ -425,6 +428,7 @@ func (d *Decoder) Lines(pal Palette) []string {
 			lines = append(lines, "")
 			continue
 		}
+
 		var line strings.Builder
 		lastAttr := cells[0].Attr
 		elems := make([]rune, 0, len(cells))
@@ -451,6 +455,7 @@ func (d *Decoder) Lines(pal Palette) []string {
 			}
 			elems = append(elems, cell.Char)
 		}
+
 		flushSpan()
 		lines = append(lines, line.String())
 	}
@@ -459,7 +464,7 @@ func (d *Decoder) Lines(pal Palette) []string {
 }
 
 // Decode reads bytes from r and interprets ANSI sequences, updating the buffer.
-func (d *Decoder) Decode(r io.Reader) error { //nolint:cyclop,funlen
+func (d *Decoder) Decode(r io.Reader) error { //nolint:funlen
 	const format = "decoder decode %s: %w"
 	if d.amigaParser {
 		var err error
@@ -522,6 +527,7 @@ func (d *Decoder) Decode(r io.Reader) error { //nolint:cyclop,funlen
 
 func resetCell(param int, params []int) (bool, int, []int) {
 	params = append(params, param)
+
 	return false, 0, params
 }
 
@@ -529,7 +535,9 @@ func inProgress(cb byte, pip bool, param int) (bool, int) {
 	if !pip {
 		return true, int(cb - '0')
 	}
+
 	value := param*10 + int(cb-'0') //nolint:mnd
+
 	return pip, value
 }
 
@@ -542,9 +550,11 @@ func setWrapping(cb byte, linewrap, current bool) bool {
 	if linewrap && cb == 'l' {
 		return false
 	}
+
 	if linewrap && cb == 'h' {
 		return true
 	}
+
 	return current
 }
 
@@ -555,8 +565,6 @@ func wrapMode(cb byte) bool {
 // CursorUp moves cursor up.
 // Attr: CUU.
 func (d *Decoder) CursorUp(params []int) error {
-	const format = "CUU A: %w: %v"
-
 	if len(params) == 0 {
 		n := d.y - 1
 		d.setCursor(nil, &n)
@@ -570,7 +578,7 @@ func (d *Decoder) CursorUp(params []int) error {
 	}
 
 	if d.strict {
-		return fmt.Errorf(format, ErrExpect0or1, params)
+		return fmt.Errorf("CUU A: %w: %v", ErrExpect0or1, params)
 	}
 	return nil
 }
@@ -578,8 +586,6 @@ func (d *Decoder) CursorUp(params []int) error {
 // CursorDown moves cursor down.
 // Attr: CUD.
 func (d *Decoder) CursorDown(params []int) error {
-	const format = "CUD B: %w: %v"
-
 	if len(params) == 0 {
 		n := d.y + 1
 		d.setCursor(nil, &n)
@@ -593,7 +599,7 @@ func (d *Decoder) CursorDown(params []int) error {
 	}
 
 	if d.strict {
-		return fmt.Errorf(format, ErrExpect0or1, params)
+		return fmt.Errorf("CUD B: %w: %v", ErrExpect0or1, params)
 	}
 	return nil
 }
@@ -601,8 +607,6 @@ func (d *Decoder) CursorDown(params []int) error {
 // CursorForward moves cursor forward.
 // Attr: CUF.
 func (d *Decoder) CursorForward(params []int) error {
-	const format = "CUF C: %w: %v"
-
 	if len(params) == 0 {
 		n := d.x + 1
 		d.setCursor(&n, nil)
@@ -616,7 +620,7 @@ func (d *Decoder) CursorForward(params []int) error {
 	}
 
 	if d.strict {
-		return fmt.Errorf(format, ErrExpect0or1, params)
+		return fmt.Errorf("CUF C: %w: %v", ErrExpect0or1, params)
 	}
 	return nil
 }
@@ -624,8 +628,6 @@ func (d *Decoder) CursorForward(params []int) error {
 // CursorBack moves cursor back.
 // Attr: CUB.
 func (d *Decoder) CursorBack(params []int) error {
-	const format = "CUB D: %w: %v"
-
 	if len(params) == 0 {
 		n := d.x - 1
 		d.setCursor(&n, nil)
@@ -639,16 +641,20 @@ func (d *Decoder) CursorBack(params []int) error {
 	}
 
 	if d.strict {
-		return fmt.Errorf(format, ErrExpect0or1, params)
+		return fmt.Errorf("CUB D: %w: %v", ErrExpect0or1, params)
 	}
 	return nil
 }
 
 // cursor enforces the ANSI spec where parameter of 0 defaults to 1.
 func cursor(params []int) int {
+	if len(params) == 0 {
+		return 1
+	}
+
 	val := params[0]
 	if val == 0 {
-		val = 1
+		return 1
 	}
 	return val
 }
@@ -656,21 +662,22 @@ func cursor(params []int) int {
 // CursorNextLine moves cursor down to the beginning of the line.
 // Attr: CNL.
 func (d *Decoder) CursorNextLine(params []int) error {
-	const format = "CNL E: %w: %v"
 	if len(params) == 0 {
 		zero := 0
 		n := d.y + 1
 		d.setCursor(&zero, &n)
 		return nil
 	}
+
 	if len(params) == 1 {
 		zero := 0
 		n := d.y + cursor(params)
 		d.setCursor(&zero, &n)
 		return nil
 	}
+
 	if d.strict {
-		return fmt.Errorf(format, ErrExpect0or1, params)
+		return fmt.Errorf("CNL E: %w: %v", ErrExpect0or1, params)
 	}
 	return nil
 }
@@ -678,21 +685,22 @@ func (d *Decoder) CursorNextLine(params []int) error {
 // CursorPreviousLine moves cursor up to the beginning of the line.
 // Attr: CPL.
 func (d *Decoder) CursorPreviousLine(params []int) error {
-	const format = "CPL F: %w: %v"
 	if len(params) == 0 {
 		zero := 0
 		n := d.y - 1
 		d.setCursor(&zero, &n)
 		return nil
 	}
+
 	if len(params) == 1 {
 		zero := 0
 		n := d.y - cursor(params)
 		d.setCursor(&zero, &n)
 		return nil
 	}
+
 	if d.strict {
-		return fmt.Errorf(format, ErrExpect0or1, params)
+		return fmt.Errorf("CPL F: %w: %v", ErrExpect0or1, params)
 	}
 	return nil
 }
@@ -700,19 +708,20 @@ func (d *Decoder) CursorPreviousLine(params []int) error {
 // CursorHorizontalAbsolute moves the cursor to column.
 // Attr: CHA.
 func (d *Decoder) CursorHorizontalAbsolute(params []int) error {
-	const format = "CHA G: %w: %v"
 	if len(params) == 0 {
 		n := 1 // or 0, depending
 		d.setCursor(&n, nil)
 		return nil
 	}
+
 	if len(params) == 1 {
 		n := cursor(params)
 		d.setCursor(&n, nil)
 		return nil
 	}
+
 	if d.strict {
-		return fmt.Errorf(format, ErrExpect0or1, params)
+		return fmt.Errorf("CHA G: %w: %v", ErrExpect0or1, params)
 	}
 	return nil
 }
@@ -750,6 +759,7 @@ func (d *Decoder) CursorPosition(params []int) error {
 		d.setCursor(&x, &y)
 		return nil
 	}
+
 	if d.strict {
 		return fmt.Errorf(format, ErrExpect0or2, params)
 	}
@@ -760,14 +770,13 @@ func toIndex(param int) int {
 	if param <= 1 {
 		return 0
 	}
+
 	return param - 1
 }
 
 // EraseInDisplay clears part of the screen.
 // Attr: ED.
-func (d *Decoder) EraseInDisplay(params []int) error { //nolint:cyclop
-	const format = "ED J: %w: %v"
-
+func (d *Decoder) EraseInDisplay(params []int) error {
 	param := 0
 	if len(params) > 0 {
 		param = params[0]
@@ -820,7 +829,7 @@ func (d *Decoder) EraseInDisplay(params []int) error { //nolint:cyclop
 
 	default:
 		if d.strict {
-			return fmt.Errorf(format, ErrRecognized, params)
+			return fmt.Errorf("ED J: %w: %v", ErrRecognized, params)
 		}
 		return nil
 	}
@@ -828,9 +837,7 @@ func (d *Decoder) EraseInDisplay(params []int) error { //nolint:cyclop
 
 // EraseInLine clears part of the line.
 // Attr: EL.
-func (d *Decoder) EraseInLine(params []int) error { //nolint:cyclop
-	const format = "EL K: %w: %v"
-
+func (d *Decoder) EraseInLine(params []int) error {
 	param := 0
 	if len(params) > 0 {
 		param = params[0]
@@ -874,7 +881,7 @@ func (d *Decoder) EraseInLine(params []int) error { //nolint:cyclop
 
 	default:
 		if d.strict {
-			return fmt.Errorf(format, ErrRecognized, params)
+			return fmt.Errorf("EL K: %w: %v", ErrRecognized, params)
 		}
 		return nil
 	}
@@ -883,22 +890,23 @@ func (d *Decoder) EraseInLine(params []int) error { //nolint:cyclop
 // SaveCursorPosition saves the cursor state for later use.
 // Abbr: SCP, SCOSC.
 func (d *Decoder) SaveCursorPosition(params []int) error {
-	const format = "SCP s: %w: %v"
 	if len(params) != 0 && d.strict {
-		return fmt.Errorf(format, ErrUnexpected, params)
+		return fmt.Errorf("SCP s: %w: %v", ErrUnexpected, params)
 	}
+
 	d.savedX = d.x
 	d.savedY = d.y
+
 	return nil
 }
 
 // RestoreCursorPosition restores the saved cursor state.
 // Abbr: RCP, SCOSC.
 func (d *Decoder) RestoreCursorPosition(params []int) error {
-	const format = "RCP u: %w: %v"
 	if len(params) != 0 && d.strict {
-		return fmt.Errorf(format, ErrUnexpected, params)
+		return fmt.Errorf("RCP u: %w: %v", ErrUnexpected, params)
 	}
+
 	d.setCursor(&d.savedX, &d.savedY)
 	return nil
 }
@@ -906,7 +914,7 @@ func (d *Decoder) RestoreCursorPosition(params []int) error {
 // ApplyCSI handles cursor movement and erase sequences that alter the buffer or cursor.
 // It follows standard ANSI/VT100 CSI final bytes used in the original request:
 // A B C D E F G H f J K s u.
-func (d *Decoder) ApplyCSI(final byte, params []int) error { //nolint:cyclop
+func (d *Decoder) ApplyCSI(final byte, params []int) error {
 	switch final {
 	case 'A':
 		return d.CursorUp(params)
@@ -936,8 +944,8 @@ func (d *Decoder) ApplyCSI(final byte, params []int) error { //nolint:cyclop
 		if d.strict {
 			return fmt.Errorf("%w: %c", ErrUnknownCSI, final)
 		}
+		return nil
 	}
-	return nil
 }
 
 // ExportParseCSI exposes parseCSI to external test packages.
@@ -945,36 +953,37 @@ func (d *Decoder) ExportParseCSI(br *bufio.Reader, cur Attribute, lineWrap *bool
 	return d.parseCSI(br, cur, lineWrap)
 }
 
+var amigaReplacements = []struct {
+	old []byte
+	new []byte
+}{
+	{[]byte{0x1b, 'c', 0x0c, cent}, nil},
+	{[]byte{'0', space, 'p', '\n'}, []byte{'\n'}},
+	{[]byte{0x1b, '[', '0', space, 'p', 0x0c}, nil},
+	{[]byte{0x1b, '[', 0x1b, '['}, []byte{0x1b, '['}},
+	{[]byte{0x1b, '[', '0', space}, []byte{space}},
+	{[]byte{0x1b, '[', '3', '4', space}, []byte{0x1b, '[', '3', '4', 'm', space}},
+}
+
 // amigaFixes reads the stream into memory, applies Amiga-specific byte
 // replacements, and returns a new reader.
 func (d *Decoder) amigaFixes(r io.Reader) (io.Reader, error) {
-	const format = "decoder amiga fixes: %w"
-	const cent, space = 0x9b, 0x20
-
 	b, err := io.ReadAll(r)
 	if err != nil {
-		return nil, fmt.Errorf(format, err)
+		return nil, fmt.Errorf("decoder amiga fixes: %w", err)
 	}
 
-	replacements := []struct {
-		old []byte
-		new []byte
-	}{
-		{[]byte{0x1b, 'c', 0x0c, cent}, nil},
-		{[]byte{'0', space, 'p', '\n'}, []byte{'\n'}},
-		{[]byte{0x1b, '[', '0', space, 'p', 0x0c}, nil},
-		{[]byte{0x1b, '[', 0x1b, '['}, []byte{0x1b, '['}},
-		{[]byte{0x1b, '[', '0', space}, []byte{space}},
-		{[]byte{0x1b, '[', '3', '4', space}, []byte{0x1b, '[', '3', '4', 'm', space}},
-	}
-	for _, rep := range replacements {
+	for _, rep := range amigaReplacements {
 		b = bytes.ReplaceAll(b, rep.old, rep.new)
 	}
 
 	return bytes.NewReader(b), nil
 }
 
-func (d *Decoder) parseCSI(br *bufio.Reader, cur Attribute, lineWrap *bool) (Attribute, error) { //nolint:cyclop,funlen,lll,gocognit
+// parseCSI has lineWrap as a pointer because its active state can be switched.
+func (d *Decoder) parseCSI( //nolint:funlen,gocognit
+	br *bufio.Reader, cur Attribute, lineWrap *bool,
+) (Attribute, error) {
 	const format = "parse csi %s: %w"
 	nb, err := br.ReadByte()
 	if err != nil {
@@ -1060,19 +1069,14 @@ func (d *Decoder) parseCSI(br *bufio.Reader, cur Attribute, lineWrap *bool) (Att
 func defaultAttr(pal Palette) Attribute {
 	s := style{}
 	s.set(pal)
-	fg := s.fg
-	bg := s.bg
 	return Attribute{
-		FG:        string(fg),
-		BG:        string(bg),
-		Bold:      false,
-		Underline: false,
-		Inverse:   false,
+		FG: string(s.fg),
+		BG: string(s.bg),
 	}
 }
 
 // ApplySGR applies SGR parameters to an incoming attribute and returns a new Attribute.
-func ApplySGR(params []int, current Attribute, pal Palette) (Attribute, error) { //nolint:cyclop,funlen
+func ApplySGR(params []int, current Attribute, pal Palette) (Attribute, error) { //nolint:funlen
 	if len(params) == 0 {
 		return defaultAttr(pal), nil
 	}
@@ -1142,15 +1146,20 @@ func ApplySGR(params []int, current Attribute, pal Palette) (Attribute, error) {
 
 // RGBHex converts the params into a "true color", red, green, blue hex string.
 func RGBHex(params []int, i int) string {
-	const format = "%02x%02x%02x"
 	if len(params) < i+5 {
 		return ""
 	}
-	const last = 255
-	r := max(0, min(last, params[i+2]))
-	g := max(0, min(last, params[i+3]))
-	b := max(0, min(last, params[i+4]))
-	return fmt.Sprintf(format, r, g, b)
+
+	var dst [6]byte
+	src := [3]byte{
+		uint8(max(0, min(last, params[i+2]))), // red
+		uint8(max(0, min(last, params[i+3]))), // green
+		uint8(max(0, min(last, params[i+4]))), // blue
+	}
+
+	hex.Encode(dst[:], src[:])
+
+	return string(dst[:])
 }
 
 // BasicHex takes a standard color code and returns a corresponding hexadecimal string.
@@ -1160,14 +1169,16 @@ func RGBHex(params []int, i int) string {
 func BasicHex(code int, bright bool, pal Palette) string {
 	const first = 0
 	const last = 7
-	const colors = 8
 	if code < first || code > last {
 		return ""
 	}
+
 	index := code
 	if bright {
+		const colors = 8
 		index = code + colors
 	}
+
 	switch pal {
 	case CGA16:
 		return string(CGA()[index])
@@ -1175,8 +1186,9 @@ func BasicHex(code int, bright bool, pal Palette) string {
 		return string(Xterm()[index])
 	case DP2:
 		return string(DPaint2()[index])
+	default:
+		return ""
 	}
-	return ""
 }
 
 // XtermHex takes a Xterm color code and returns the corresponding RBG values
@@ -1188,23 +1200,30 @@ func XtermHex(code int, pal Palette) string {
 	if code < 0 || code > 255 {
 		return ""
 	}
+
 	const basic = 7
 	if code <= basic {
 		return BasicHex(code, false, pal)
 	}
+
 	const bright = 15
 	if code <= bright {
 		const colors = 8
 		c := code - colors
 		return BasicHex(c, true, pal)
 	}
-	const xterm = 255
-	if code <= xterm {
-		r, g, b := XtermColors(code)
-		const format = "%02x%02x%02x"
-		return fmt.Sprintf(format, r, g, b)
+
+	r, g, b := XtermColors(code)
+	src := [3]byte{
+		uint8(max(0, min(last, r))),
+		uint8(max(0, min(last, g))),
+		uint8(max(0, min(last, b))),
 	}
-	return ""
+	var dst [6]byte
+
+	hex.Encode(dst[:], src[:])
+
+	return string(dst[:])
 }
 
 // XtermColors takes a Xterm non-system color code and returns the corresponding RGB values.
@@ -1223,10 +1242,8 @@ func XtermColors(code int) (int, int, int) {
 	if code >= 232 && code <= 255 {
 		return XtermGray(code)
 	}
-	invalid := func() (int, int, int) {
-		return -1, -1, -1
-	}
-	return invalid()
+
+	return -1, -1, -1
 }
 
 // XtermColor returns the RGB values for non-system Xterm colors.
@@ -1235,16 +1252,18 @@ func XtermColor(code int) (int, int, int) {
 	const offset = 16
 	const colors = 36
 	c := code - offset
+
 	return cubed(c / colors), cubed((c % colors) / levels), cubed(c % levels)
 }
 
 // cubed converts a 0-5 cube coordinate to an 8-bit RGB component.
 func cubed(c int) int {
 	const level0 = 0
-	const level1 = 55
 	if c == level0 {
 		return 0
 	}
+
+	const level1 = 55
 	return level1 + c*40
 }
 
@@ -1253,6 +1272,7 @@ func XtermGray(code int) (int, int, int) {
 	const grayBoundary = 232
 	level := code - grayBoundary
 	v := 8 + level*10 //nolint:mnd
+
 	return v, v, v
 }
 
@@ -1265,7 +1285,6 @@ type style struct {
 
 // set the default colors of the palette.
 func (s *style) set(pal Palette) {
-	s.palette = pal
 	switch pal {
 	case CGA16:
 		s.fg = CGA().DefaultFG()
@@ -1276,7 +1295,10 @@ func (s *style) set(pal Palette) {
 	case DP2:
 		s.fg = DPaint2().DefaultFG()
 		s.bg = DPaint2().DefaultBG()
+	default:
+		return
 	}
+	s.palette = pal
 }
 
 // buildStyle takes the Attribute and returns a HTML style attribute.
@@ -1287,56 +1309,54 @@ func buildStyle(a Attribute, defaults style) string {
 		fg, bg = bg, fg
 	}
 
-	const size = 3
-	elems := make([]string, 0, size)
-
-	foreground := fg
-	if foreground == "" {
-		foreground = defaults.fg
+	if fg == "" {
+		fg = defaults.fg
 	}
-	var c Color
-	c = foreground
 	if a.Bold {
-		c = Bright(c, defaults.palette)
+		fg = Bright(fg, defaults.palette)
 	}
-	elems = append(elems, c.FG())
 
-	if bg != "" {
-		background := bg
-		const black = CBlack
-		if background != "" && background.BG() != black.BG() {
-			elems = append(elems, background.BG())
-		}
+	var sb strings.Builder
+	sb.WriteString(fg.FG())
+
+	if bg != "" && bg.BG() != CBlack.BG() {
+		sb.WriteString(bg.BG())
 	}
+
 	if a.Underline {
-		const underline = "text-decoration:underline;"
-		elems = append(elems, underline)
+		sb.WriteString(underline)
 	}
-	const sep = ""
-	return strings.Join(elems, sep)
+
+	return sb.String()
 }
 
 // Bright takes a palette color and swaps it for a lighter variant.
 // For example, Color.CBlack (CGA black) returns Color.CDarkGray (CGA bright black).
 func Bright(c Color, pal Palette) Color {
-	var standard Colors
+	var palette Colors
+
 	switch pal {
 	case CGA16:
-		standard = CGA()
+		palette = CGA()
 	case Xterm16:
-		standard = Xterm()
+		palette = Xterm()
 	case DP2:
-		standard = DPaint2()
+		palette = DPaint2()
+	default:
+		return ""
 	}
+
 	const size = 16
 	colors := make([]string, size)
-	for i, x := range standard {
-		colors[i] = string(x)
+	for i, color := range palette {
+		colors[i] = string(color)
 	}
-	match := slices.Index(colors, string(c))
+
+	match := slices.Index(palette[:], c)
 	if match >= 0 && match <= 7 {
-		return standard[match+8]
+		return palette[match+8]
 	}
+
 	return ""
 }
 
