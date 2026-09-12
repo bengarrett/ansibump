@@ -141,6 +141,7 @@ func (c Color) BG() string {
 	if c == "" {
 		return ""
 	}
+
 	return "background-color:#" + string(c) + ";"
 }
 
@@ -149,6 +150,7 @@ func (c Color) FG() string {
 	if c == "" {
 		return ""
 	}
+
 	return "color:#" + string(c) + ";"
 }
 
@@ -158,6 +160,7 @@ type Colors [16]Color
 // which can be used as the default foreground color.
 func (c Colors) DefaultFG() Color {
 	const white = 7
+
 	return c[white]
 }
 
@@ -165,6 +168,7 @@ func (c Colors) DefaultFG() Color {
 // which can be used as the default background color.
 func (c Colors) DefaultBG() Color {
 	const black = 0
+
 	return c[black]
 }
 
@@ -293,12 +297,14 @@ func (c *Customizer) Bytes(r io.Reader) ([]byte, error) {
 	}
 
 	d := NewDecoder(c)
-	if err := d.Decode(r); err != nil {
+	err := d.Decode(r)
+	if err != nil {
 		return nil, fmt.Errorf(format, "read", err)
 	}
 
 	var b bytes.Buffer
-	if err := d.Write(&b); err != nil {
+	err = d.Write(&b)
+	if err != nil {
 		return nil, fmt.Errorf(format, "write", err)
 	}
 
@@ -315,12 +321,14 @@ func (c *Customizer) String(r io.Reader) (string, error) {
 	}
 
 	d := NewDecoder(c)
-	if err := d.Decode(r); err != nil {
+	err := d.Decode(r)
+	if err != nil {
 		return "", fmt.Errorf(format, "read", err)
 	}
 
 	var b bytes.Buffer
-	if err := d.Write(&b); err != nil {
+	err = d.Write(&b)
+	if err != nil {
 		return "", fmt.Errorf(format, "write", err)
 	}
 
@@ -338,6 +346,7 @@ func Bytes(r io.Reader, width int) ([]byte, error) {
 		Color:       CGA16,
 		CharSet:     charmap.CodePage437,
 	}
+
 	return cust.Bytes(r)
 }
 
@@ -352,6 +361,7 @@ func String(r io.Reader, width int) (string, error) {
 		Color:       CGA16,
 		CharSet:     charmap.CodePage437,
 	}
+
 	return cust.String(r)
 }
 
@@ -426,6 +436,7 @@ func (d *Decoder) Lines(pal Palette) []string {
 	for _, cells := range d.buffer {
 		if len(cells) == 0 {
 			lines = append(lines, "")
+
 			continue
 		}
 
@@ -488,11 +499,13 @@ func (d *Decoder) Decode(r io.Reader) error { //nolint:funlen
 			if err == io.EOF {
 				return nil
 			}
+
 			return fmt.Errorf(format, "read byte", err)
 		}
 
 		if b >= space {
 			d.writeChar(b, cur)
+
 			continue
 		}
 
@@ -517,6 +530,7 @@ func (d *Decoder) Decode(r io.Reader) error { //nolint:funlen
 				d.writeChar(b, cur)
 			case d.strict:
 				const format = "%w: 0x%02x"
+
 				return fmt.Errorf(format, ErrUnknownCtr, b)
 			default:
 				d.writeChar(space, cur)
@@ -568,18 +582,21 @@ func (d *Decoder) CursorUp(params []int) error {
 	if len(params) == 0 {
 		n := d.y - 1
 		d.setCursor(nil, &n)
+
 		return nil
 	}
 
 	if len(params) == 1 {
 		n := d.y - cursor(params)
 		d.setCursor(nil, &n)
+
 		return nil
 	}
 
 	if d.strict {
 		return fmt.Errorf("CUU A: %w: %v", ErrExpect0or1, params)
 	}
+
 	return nil
 }
 
@@ -589,18 +606,21 @@ func (d *Decoder) CursorDown(params []int) error {
 	if len(params) == 0 {
 		n := d.y + 1
 		d.setCursor(nil, &n)
+
 		return nil
 	}
 
 	if len(params) == 1 {
 		n := d.y + cursor(params)
 		d.setCursor(nil, &n)
+
 		return nil
 	}
 
 	if d.strict {
 		return fmt.Errorf("CUD B: %w: %v", ErrExpect0or1, params)
 	}
+
 	return nil
 }
 
@@ -610,18 +630,21 @@ func (d *Decoder) CursorForward(params []int) error {
 	if len(params) == 0 {
 		n := d.x + 1
 		d.setCursor(&n, nil)
+
 		return nil
 	}
 
 	if len(params) == 1 {
 		n := d.x + cursor(params)
 		d.setCursor(&n, nil)
+
 		return nil
 	}
 
 	if d.strict {
 		return fmt.Errorf("CUF C: %w: %v", ErrExpect0or1, params)
 	}
+
 	return nil
 }
 
@@ -631,18 +654,21 @@ func (d *Decoder) CursorBack(params []int) error {
 	if len(params) == 0 {
 		n := d.x - 1
 		d.setCursor(&n, nil)
+
 		return nil
 	}
 
 	if len(params) == 1 {
 		n := d.x - cursor(params)
 		d.setCursor(&n, nil)
+
 		return nil
 	}
 
 	if d.strict {
 		return fmt.Errorf("CUB D: %w: %v", ErrExpect0or1, params)
 	}
+
 	return nil
 }
 
@@ -656,6 +682,7 @@ func cursor(params []int) int {
 	if val == 0 {
 		return 1
 	}
+
 	return val
 }
 
@@ -666,6 +693,7 @@ func (d *Decoder) CursorNextLine(params []int) error {
 		zero := 0
 		n := d.y + 1
 		d.setCursor(&zero, &n)
+
 		return nil
 	}
 
@@ -673,12 +701,14 @@ func (d *Decoder) CursorNextLine(params []int) error {
 		zero := 0
 		n := d.y + cursor(params)
 		d.setCursor(&zero, &n)
+
 		return nil
 	}
 
 	if d.strict {
 		return fmt.Errorf("CNL E: %w: %v", ErrExpect0or1, params)
 	}
+
 	return nil
 }
 
@@ -689,6 +719,7 @@ func (d *Decoder) CursorPreviousLine(params []int) error {
 		zero := 0
 		n := d.y - 1
 		d.setCursor(&zero, &n)
+
 		return nil
 	}
 
@@ -696,12 +727,14 @@ func (d *Decoder) CursorPreviousLine(params []int) error {
 		zero := 0
 		n := d.y - cursor(params)
 		d.setCursor(&zero, &n)
+
 		return nil
 	}
 
 	if d.strict {
 		return fmt.Errorf("CPL F: %w: %v", ErrExpect0or1, params)
 	}
+
 	return nil
 }
 
@@ -711,18 +744,21 @@ func (d *Decoder) CursorHorizontalAbsolute(params []int) error {
 	if len(params) == 0 {
 		n := 1 // or 0, depending
 		d.setCursor(&n, nil)
+
 		return nil
 	}
 
 	if len(params) == 1 {
 		n := cursor(params)
 		d.setCursor(&n, nil)
+
 		return nil
 	}
 
 	if d.strict {
 		return fmt.Errorf("CHA G: %w: %v", ErrExpect0or1, params)
 	}
+
 	return nil
 }
 
@@ -740,6 +776,7 @@ func (d *Decoder) CursorPosition(params []int) error {
 	if len(params) == cup0 {
 		x, y := 0, 0
 		d.setCursor(&x, &y)
+
 		return nil
 	}
 
@@ -750,6 +787,7 @@ func (d *Decoder) CursorPosition(params []int) error {
 		y := toIndex(params[0])
 		x := 0
 		d.setCursor(&x, &y)
+
 		return nil
 	}
 
@@ -757,12 +795,14 @@ func (d *Decoder) CursorPosition(params []int) error {
 		y := toIndex(params[0])
 		x := toIndex(params[1])
 		d.setCursor(&x, &y)
+
 		return nil
 	}
 
 	if d.strict {
 		return fmt.Errorf(format, ErrExpect0or2, params)
 	}
+
 	return nil
 }
 
@@ -798,6 +838,7 @@ func (d *Decoder) EraseInDisplay(params []int) error {
 			d.buffer = d.buffer[:d.y+1]
 			d.buffer[d.y] = d.currentLine
 		}
+
 		return nil
 
 	case erase1:
@@ -816,6 +857,7 @@ func (d *Decoder) EraseInDisplay(params []int) error {
 		if d.y < len(d.buffer) {
 			d.buffer[d.y] = d.currentLine
 		}
+
 		return nil
 
 	case erase2, erase3:
@@ -825,12 +867,14 @@ func (d *Decoder) EraseInDisplay(params []int) error {
 		d.currentLine = d.currentLine[:0]
 		d.x = 0
 		d.y = 0
+
 		return nil
 
 	default:
 		if d.strict {
 			return fmt.Errorf("ED J: %w: %v", ErrRecognized, params)
 		}
+
 		return nil
 	}
 }
@@ -857,6 +901,7 @@ func (d *Decoder) EraseInLine(params []int) error {
 		if d.y < len(d.buffer) {
 			d.buffer[d.y] = d.currentLine
 		}
+
 		return nil
 
 	case erase1:
@@ -870,6 +915,7 @@ func (d *Decoder) EraseInLine(params []int) error {
 		if d.y < len(d.buffer) {
 			d.buffer[d.y] = d.currentLine
 		}
+
 		return nil
 
 	case erase2:
@@ -877,12 +923,14 @@ func (d *Decoder) EraseInLine(params []int) error {
 		if d.y < len(d.buffer) {
 			d.buffer[d.y] = d.currentLine
 		}
+
 		return nil
 
 	default:
 		if d.strict {
 			return fmt.Errorf("EL K: %w: %v", ErrRecognized, params)
 		}
+
 		return nil
 	}
 }
@@ -908,6 +956,7 @@ func (d *Decoder) RestoreCursorPosition(params []int) error {
 	}
 
 	d.setCursor(&d.savedX, &d.savedY)
+
 	return nil
 }
 
@@ -944,6 +993,7 @@ func (d *Decoder) ApplyCSI(final byte, params []int) error {
 		if d.strict {
 			return fmt.Errorf("%w: %c", ErrUnknownCSI, final)
 		}
+
 		return nil
 	}
 }
@@ -990,6 +1040,7 @@ func (d *Decoder) parseCSI( //nolint:funlen,gocognit
 		if err == io.EOF {
 			return cur, nil
 		}
+
 		return cur, fmt.Errorf(format, "read sequence", err)
 	}
 
@@ -997,6 +1048,7 @@ func (d *Decoder) parseCSI( //nolint:funlen,gocognit
 		if d.strict {
 			return cur, fmt.Errorf(format, string(nb), ErrUnknownEsc)
 		}
+
 		return cur, nil
 	}
 
@@ -1016,36 +1068,43 @@ func (d *Decoder) parseCSI( //nolint:funlen,gocognit
 		switch cb {
 		case '=':
 			setmode = true
+
 			continue
 		case '?':
 			private = true
+
 			continue
 		case ' ':
 			continue
 		case ';':
 			if paramInProgress {
 				paramInProgress, param, params = resetCell(param, params)
+
 				continue
 			}
 			if d.strict {
 				return cur, ErrParam
 			}
 			params = append(params, -1)
+
 			continue
 		}
 
 		// handle ranges and state-dependent logic
 		if setmode && cb >= '0' && cb <= '9' {
 			linewrp = wrapMode(cb)
+
 			continue
 		}
 		if setmode && (cb == 'h' || cb == 'l') {
 			*lineWrap = setWrapping(cb, linewrp, *lineWrap)
 			setmode = false
+
 			continue
 		}
 		if cb >= '0' && cb <= '9' {
 			paramInProgress, param = inProgress(cb, paramInProgress, param)
+
 			continue
 		}
 		if paramInProgress {
@@ -1055,10 +1114,12 @@ func (d *Decoder) parseCSI( //nolint:funlen,gocognit
 			return ApplySGR(params, cur, d.palette)
 		}
 		if !private {
-			if err := d.ApplyCSI(cb, params); err != nil {
+			err := d.ApplyCSI(cb, params)
+			if err != nil {
 				return cur, err
 			}
 		}
+
 		break
 	}
 
@@ -1069,6 +1130,7 @@ func (d *Decoder) parseCSI( //nolint:funlen,gocognit
 func defaultAttr(pal Palette) Attribute {
 	s := style{}
 	s.set(pal)
+
 	return Attribute{
 		FG: string(s.fg),
 		BG: string(s.bg),
@@ -1122,6 +1184,7 @@ func ApplySGR(params []int, current Attribute, pal Palette) (Attribute, error) {
 					attr.BG = XtermHex(code, pal)
 				}
 				i += 3
+
 				continue
 			}
 			// flattened lookahead logic for true-color (mode 2 = RGB)
@@ -1132,6 +1195,7 @@ func ApplySGR(params []int, current Attribute, pal Palette) (Attribute, error) {
 					attr.BG = RGBHex(params, i)
 				}
 				i += 5
+
 				continue
 			}
 			// malformed or unknown extended color; strict mode could error here
@@ -1210,6 +1274,7 @@ func XtermHex(code int, pal Palette) string {
 	if code <= bright {
 		const colors = 8
 		c := code - colors
+
 		return BasicHex(c, true, pal)
 	}
 
@@ -1264,6 +1329,7 @@ func cubed(c int) int {
 	}
 
 	const level1 = 55
+
 	return level1 + c*40
 }
 

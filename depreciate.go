@@ -9,6 +9,7 @@ import (
 // Use [NewDecoder] instead.
 func (c *Customizer) NewDecoder() *Decoder {
 	d := NewDecoder(nil)
+
 	return d
 }
 
@@ -19,6 +20,7 @@ func (c *Customizer) Buffer(r io.Reader) (*bytes.Buffer, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	return bytes.NewBuffer(buf), nil
 }
 

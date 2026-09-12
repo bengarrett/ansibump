@@ -77,6 +77,7 @@ func bright(c ansibump.Color, standard Colors) Color { //nolint:unparam
 	if match >= 0 && match <= 7 {
 		return standard[match+8]
 	}
+
 	return ""
 }
 

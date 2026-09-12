@@ -36,6 +36,7 @@ func checkGolden(t *testing.T, name string, actual []byte) {
 		err := os.WriteFile(goldenPath, actual, 0o644) //nolint:gosec
 		be.Err(t, err, nil)
 		t.Logf("updated golden file: %s", goldenPath)
+
 		return
 	}
 
@@ -70,6 +71,7 @@ func NewCanvas(t *testing.T, width, height int) *Canvas {
 	for i := range grid {
 		grid[i] = make([]Cell, width)
 	}
+
 	return &Canvas{
 		Width:  width,
 		Height: height,
@@ -84,10 +86,12 @@ func (c *Canvas) WriteRune(t *testing.T, r rune, attr ansibump.Attribute) {
 		c.X = 0
 		c.Y++
 		c.ensureHeight(t)
+
 		return
 	}
 	if r == '\r' {
 		c.X = 0
+
 		return
 	}
 
@@ -115,6 +119,7 @@ func (c *Canvas) String(t *testing.T) string {
 		for _, cell := range slices.Backward(row) {
 			if cell.Rune != 0 && cell.Rune != ' ' {
 				lastNonEmptyRow = y
+
 				break
 			}
 		}
@@ -169,6 +174,7 @@ func TestRenderZIIRTXT(t *testing.T) {
 		if b == 0x1b { // ESC byte
 			cur, err = d.ExportParseCSI(br, cur, &lineWrap)
 			be.Err(t, err, nil)
+
 			continue
 		}
 
