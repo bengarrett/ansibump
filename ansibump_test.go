@@ -137,3 +137,40 @@ func TestCustomizer(t *testing.T) {
 	be.Equal(t, got, "")
 	be.Err(t, err)
 }
+
+func TestBlinkMode(t *testing.T) {
+	t.Parallel()
+	be.Equal(t, ansibump.BlinkOff.String(), "off")
+	be.Equal(t, ansibump.BlinkText.String(), "blink")
+	be.Equal(t, ansibump.BlinkICE.String(), "ice")
+	be.Equal(t, ansibump.BlinkMode(-1).String(), "unknown")
+}
+
+func TestBlink(t *testing.T) {
+	t.Parallel()
+	const s = "Normal\x1b[5mBlink\x1b[25mReset"
+
+	// BlinkOff: SGR 5 ignored
+	customOff := ansibump.Customizer{Blink: ansibump.BlinkOff}
+	gotOff, err := customOff.String(strings.NewReader(s))
+	be.Err(t, err, nil)
+	be.True(t, !strings.Contains(gotOff, "ansi-blink"))
+
+	// BlinkText: SGR 5 produces class="ansi-blink"
+	customText := ansibump.Customizer{Blink: ansibump.BlinkText}
+	gotText, err := customText.String(strings.NewReader(s))
+	be.Err(t, err, nil)
+	be.True(t, strings.Contains(gotText, `<span class="ansi-blink" style="`))
+	be.True(t, strings.Contains(gotText, `>Blink</span>`))
+	be.True(t, strings.Contains(gotText, `<span style="`))
+	be.True(t, strings.Contains(gotText, `>Reset</span>`))
+
+	// BlinkICE: SGR 5 produces bright background
+	const sICE = "\x1b[41;5mBright\x1b[25mDark"
+	customICE := ansibump.Customizer{Blink: ansibump.BlinkICE}
+	gotICE, err := customICE.String(strings.NewReader(sICE))
+	be.Err(t, err, nil)
+	be.True(t, !strings.Contains(gotICE, "ansi-blink"))
+	be.True(t, strings.Contains(gotICE, "background-color:#f55;")) // bright red
+	be.True(t, strings.Contains(gotICE, "background-color:#a00;")) // standard red
+}

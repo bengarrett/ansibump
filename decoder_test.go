@@ -828,6 +828,7 @@ func TestApplySGR(t *testing.T) {
 		name    string
 		params  []int
 		initial Attribute
+		blink   BlinkMode
 		want    Attribute
 	}{
 		{
@@ -859,6 +860,41 @@ func TestApplySGR(t *testing.T) {
 			params:  []int{NotUnderline, NotInvert},
 			initial: Attribute{Underline: true, Inverse: true},
 			want:    Attribute{Underline: false, Inverse: false},
+		},
+		{
+			name:    "blink enable and disable",
+			params:  []int{Blink, NotBlink},
+			initial: Attribute{},
+			blink:   BlinkText,
+			want:    Attribute{Blink: false},
+		},
+		{
+			name:    "blink enable",
+			params:  []int{Blink},
+			initial: Attribute{},
+			blink:   BlinkText,
+			want:    Attribute{Blink: true},
+		},
+		{
+			name:    "ice enable and disable",
+			params:  []int{Blink, NotBlink},
+			initial: Attribute{},
+			blink:   BlinkICE,
+			want:    Attribute{ICE: false},
+		},
+		{
+			name:    "ice enable",
+			params:  []int{Blink},
+			initial: Attribute{},
+			blink:   BlinkICE,
+			want:    Attribute{ICE: true},
+		},
+		{
+			name:    "blink off ignores SGR 5",
+			params:  []int{Blink},
+			initial: Attribute{},
+			blink:   BlinkOff,
+			want:    Attribute{},
 		},
 		{
 			name:    "default FG and BG",
@@ -924,7 +960,7 @@ func TestApplySGR(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			got, err := ApplySGR(tt.params, tt.initial, pal)
+			got, err := ApplySGR(tt.params, tt.initial, pal, tt.blink)
 			be.Err(t, err, nil)
 			be.Equal(t, got, tt.want)
 		})

@@ -42,6 +42,8 @@ const (
 	NotBoldFaint = 22
 	Underline    = 4
 	NotUnderline = 24
+	Blink        = 5
+	NotBlink     = 25
 	Invert       = 7
 	NotInvert    = 27
 	DefaultFG    = 39
@@ -70,6 +72,28 @@ const (
 	Xterm16                // Xterm terminal emulator program for the X Window System colorset from the mid-1980s
 	DP2                    // DP2 is a Commodore Amiga era Deluxe Paint II colorset that mimics the colors of CGA16
 )
+
+// BlinkMode defines how ANSI SGR 5 (\x1b[5m) is interpreted.
+type BlinkMode int
+
+const (
+	BlinkOff  BlinkMode = iota // BlinkOff is used to force no blinking and no iCE colors.
+	BlinkText                  // BlinkText interprets SGR 5 as blinking text (default).
+	BlinkICE                   // BlinkICE interprets SGR 5 as high-intensity / bright background (iCE color support).
+)
+
+func (b BlinkMode) String() string {
+	switch b {
+	case BlinkOff:
+		return "off"
+	case BlinkText:
+		return "blink"
+	case BlinkICE:
+		return "ice"
+	default:
+		return "unknown"
+	}
+}
 
 // Color code represented as hexadecimal numeric value.
 // These are often 6 digit values RRGGBB (red, green, blue),
@@ -200,6 +224,8 @@ type Attribute struct {
 	Bold      bool   // Bold toggles a lighter color variation
 	Underline bool   // Underline toggles a underline text decoration
 	Inverse   bool   // Inverse swaps the background and foreground colors
+	Blink     bool   // Blink toggles blinking text
+	ICE       bool   // ICE toggles bright/high-intensity background
 }
 
 // Decoder maintains the screen buffer and cursor state while parsing ANSI.
@@ -215,6 +241,7 @@ type Decoder struct {
 	defaultBG      Color
 	amigaParser    bool
 	strict         bool
+	blink          BlinkMode
 }
 
 // cell in the output buffer.
@@ -240,6 +267,9 @@ type Customizer struct {
 	//   - Xterm16 is the Xterm terminal emulator program for the X Window System colorset from the mid-1980s.
 	//   - DP2 is a Commodore Amiga era Deluxe Paint II colorset that mimics the colors of CGA16.
 	Color Palette
+	// Blink sets the interpretation of the blink/iCE SGR code.
+	// The default (BlinkOff) ignores SGR 5 for backward compatibility.
+	Blink BlinkMode
 	// CharSet is the simple character encoding used by the text.
 	//
 	// Generally the charset of ANSI art should be [charmap.CodePage437],
@@ -284,6 +314,7 @@ func NewDecoder(c *Customizer) *Decoder {
 		defaultBG:   def.bg,
 		amigaParser: c.AmigaParser,
 		strict:      c.Strict,
+		blink:       c.Blink,
 	}
 }
 
@@ -449,7 +480,11 @@ func (d *Decoder) Lines(pal Palette) []string {
 				return
 			}
 			style := buildStyle(lastAttr, defaults)
-			line.WriteString(`<span style="`)
+			if lastAttr.Blink {
+				line.WriteString(`<span class="ansi-blink" style="`)
+			} else {
+				line.WriteString(`<span style="`)
+			}
 			line.WriteString(html.EscapeString(style))
 			line.WriteString(`">`)
 			// Idiomatic: cast []rune directly to string
@@ -1111,7 +1146,7 @@ func (d *Decoder) parseCSI( //nolint:funlen,gocognit
 			params = append(params, param)
 		}
 		if !private && cb == 'm' {
-			return ApplySGR(params, cur, d.palette)
+			return ApplySGR(params, cur, d.palette, d.blink)
 		}
 		if !private {
 			err := d.ApplyCSI(cb, params)
@@ -1138,9 +1173,14 @@ func defaultAttr(pal Palette) Attribute {
 }
 
 // ApplySGR applies SGR parameters to an incoming attribute and returns a new Attribute.
-func ApplySGR(params []int, current Attribute, pal Palette) (Attribute, error) { //nolint:funlen
+func ApplySGR(params []int, current Attribute, pal Palette, blink ...BlinkMode) (Attribute, error) { //nolint:funlen
 	if len(params) == 0 {
 		return defaultAttr(pal), nil
+	}
+
+	mode := BlinkOff
+	if len(blink) > 0 {
+		mode = blink[0]
 	}
 
 	attr := current
@@ -1157,6 +1197,11 @@ func ApplySGR(params []int, current Attribute, pal Palette) (Attribute, error) {
 			attr.Underline = true
 		case p == NotUnderline:
 			attr.Underline = false
+		case p == Blink:
+			applyBlink(&attr, mode)
+		case p == NotBlink:
+			attr.Blink = false
+			attr.ICE = false
 		case p == Invert:
 			attr.Inverse = true
 		case p == NotInvert:
@@ -1174,27 +1219,8 @@ func ApplySGR(params []int, current Attribute, pal Palette) (Attribute, error) {
 		case BrightBG1st <= p && p <= BrightBGEnd:
 			attr.BG = BasicHex(p-BrightBG1st, true, pal)
 		case p == SetFG || p == SetBG:
-			isFG := p == SetFG
-			// flattened lookahead logic for extended colors (mode 5 = 256-color)
-			if i+2 < len(params) && params[i+1] == 5 {
-				code := params[i+2]
-				if isFG {
-					attr.FG = XtermHex(code, pal)
-				} else {
-					attr.BG = XtermHex(code, pal)
-				}
-				i += 3
-
-				continue
-			}
-			// flattened lookahead logic for true-color (mode 2 = RGB)
-			if i+4 < len(params) && params[i+1] == 2 {
-				if isFG {
-					attr.FG = RGBHex(params, i)
-				} else {
-					attr.BG = RGBHex(params, i)
-				}
-				i += 5
+			if next, ok := extendColor(p, params, i, pal, &attr); ok {
+				i = next
 
 				continue
 			}
@@ -1206,6 +1232,44 @@ func ApplySGR(params []int, current Attribute, pal Palette) (Attribute, error) {
 	}
 
 	return attr, nil
+}
+
+func extendColor(p int, params []int, i int, pal Palette, attr *Attribute) (int, bool) {
+	const step256, stepRGB = 3, 5
+	isFG := p == SetFG
+	// flattened lookahead logic for extended colors (mode 5 = 256-color)
+	if i+2 < len(params) && params[i+1] == 5 {
+		code := params[i+2]
+		if isFG {
+			attr.FG = XtermHex(code, pal)
+		} else {
+			attr.BG = XtermHex(code, pal)
+		}
+
+		return i + step256, true
+	}
+	// flattened lookahead logic for true-color (mode 2 = RGB)
+	if i+4 < len(params) && params[i+1] == 2 {
+		if isFG {
+			attr.FG = RGBHex(params, i)
+		} else {
+			attr.BG = RGBHex(params, i)
+		}
+
+		return i + stepRGB, true
+	}
+
+	return i, false
+}
+
+func applyBlink(attr *Attribute, mode BlinkMode) {
+	switch mode {
+	case BlinkText:
+		attr.Blink = true
+	case BlinkICE:
+		attr.ICE = true
+	case BlinkOff:
+	}
 }
 
 // RGBHex converts the params into a "true color", red, green, blue hex string.
@@ -1380,6 +1444,12 @@ func buildStyle(a Attribute, defaults style) string {
 	}
 	if a.Bold {
 		fg = Bright(fg, defaults.palette)
+	}
+	if a.ICE {
+		if bg == "" {
+			bg = defaults.bg
+		}
+		bg = Bright(bg, defaults.palette)
 	}
 
 	var sb strings.Builder
